@@ -16,6 +16,35 @@ log_inventories: true
 force_include_default: true
 can_upgrade: true
 factories:
+  kinetics:
+    type: FCC
+    name: Kinetics Factory
+    citadelBreakReduction: 1.0
+    setupcost:
+      wind_essence:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: PAPER
+        amount: 64
+        meta:
+          meta-type: UNSPECIFIC
+          ==: ItemMeta
+          display-name: §fWind Essence
+      breeze_rod:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: BREEZE_ROD
+        amount: 4
+      heavy_core:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: HEAVY_CORE
+        amount: 1
+    recipes:
+      - charge_wind_essence
+      - make_maces
+      - make_mob_repellators
+      - repair_kinetics_factory
   meteoric_iron_sword:
     type: FCC
     name: Meteoric Iron Sword Smith
@@ -313,6 +342,7 @@ factories:
       - charcoal_from_dark_oak_log
       - charcoal_from_cherry_log
       - charcoal_from_mangrove_log
+      - charcoal_from_pale_oak_log
       - charcoal_from_crimson_stem
       - charcoal_from_warped_stem
       - charcoal_from_coal
@@ -1175,6 +1205,12 @@ factories:
       - make_mangrove_hanging_signs
       - make_mangrove_trapdoors
       - make_mangrove_doors
+      - make_pale_oak_fences
+      - make_pale_oak_fence_gates
+      - make_pale_oak_signs
+      - make_pale_oak_hanging_signs
+      - make_pale_oak_trapdoors
+      - make_pale_oak_doors
       - make_crimson_fences
       - make_crimson_fence_gates
       - make_crimson_signs
@@ -1239,6 +1275,7 @@ factories:
         amount: 32
     recipes:
       - make_saddle
+      - make_harness
       - make_lead
       - make_bio_component
       - make_husbandry_kit
@@ -1666,6 +1703,7 @@ factories:
       - grow_sculk
       - grow_sculk_vein
       - kill_bush
+      - grow_dry_grass
       - root_dirt
       - melt_ice
       - form_tube_coral_block
@@ -1745,6 +1783,30 @@ factories:
       - weather_copper_trapdoors
       - weather_exposed_copper_trapdoors
       - weather_weathered_copper_trapdoors
+      - make_copper_chests
+      - wax_copper_chests
+      - wax_exposed_copper_chests
+      - wax_weathered_copper_chests
+      - wax_oxidized_copper_chests
+      - weather_copper_chests
+      - weather_exposed_copper_chests
+      - weather_weathered_copper_chests
+      - make_copper_bars
+      - wax_copper_bars
+      - wax_exposed_copper_bars
+      - wax_weathered_copper_bars
+      - wax_oxidized_copper_bars
+      - weather_copper_bars
+      - weather_exposed_copper_bars
+      - weather_weathered_copper_bars
+      - make_copper_chain
+      - wax_copper_chain
+      - wax_exposed_copper_chain
+      - wax_weathered_copper_chain
+      - wax_oxidized_copper_chain
+      - weather_copper_chain
+      - weather_exposed_copper_chain
+      - weather_weathered_copper_chain
       - make_copper_workshop_kit
       - repair_copper_workshop
       - repair_copper_workshop_kit
@@ -2980,6 +3042,22 @@ recipes:
         v: 3839
         ==: org.bukkit.inventory.ItemStack
         type: MANGROVE_LOG
+        amount: 64
+    output:
+      charcoal:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: CHARCOAL
+        amount: 128
+  charcoal_from_pale_oak_log:
+    production_time: 4s
+    name: Make Charcoal from Pale Oak Logs
+    type: PRODUCTION
+    input:
+      log:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: PALE_OAK_LOG
         amount: 64
     output:
       charcoal:
@@ -7595,6 +7673,107 @@ recipes:
         ==: org.bukkit.inventory.ItemStack
         type: MANGROVE_FENCE_GATE
         amount: 128
+  make_pale_oak_fences:
+    production_time: 4s
+    name: Make Fences
+    type: PRODUCTION
+    input:
+      PALE_OAK_LOG:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: PALE_OAK_LOG
+        amount: 16
+    output:
+      fence:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: PALE_OAK_FENCE
+        amount: 128
+  make_pale_oak_signs:
+    production_time: 4s
+    name: Make Signs
+    type: PRODUCTION
+    input:
+      PALE_OAK_LOG:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: PALE_OAK_LOG
+        amount: 24
+    output:
+      sign:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: PALE_OAK_SIGN
+        amount: 128
+  make_pale_oak_hanging_signs:
+    production_time: 4s
+    name: Make Spruce Hanging Signs
+    type: PRODUCTION
+    input:
+      chest:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: PALE_OAK_LOG
+        amount: 24
+      iron_ingot:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: IRON_INGOT
+        amount: 4
+    output:
+      sign:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: PALE_OAK_HANGING_SIGN
+        amount: 128
+  make_pale_oak_trapdoors:
+    production_time: 4s
+    name: Make Trap Doors
+    type: PRODUCTION
+    input:
+      PALE_OAK_LOG:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: PALE_OAK_LOG
+        amount: 32
+    output:
+      trapdoor:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: PALE_OAK_TRAPDOOR
+        amount: 128
+  make_pale_oak_doors:
+    production_time: 4s
+    name: Make Doors
+    type: PRODUCTION
+    input:
+      PALE_OAK_LOG:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: PALE_OAK_LOG
+        amount: 24
+    output:
+      door:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: PALE_OAK_DOOR
+        amount: 128
+  make_pale_oak_fence_gates:
+    production_time: 4s
+    name: Make Fence Gates
+    type: PRODUCTION
+    input:
+      PALE_OAK_LOG:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: PALE_OAK_LOG
+        amount: 16
+    output:
+      door:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: PALE_OAK_FENCE_GATE
+        amount: 128
   make_crimson_fences:
     production_time: 4s
     name: Make Fences
@@ -7966,22 +8145,43 @@ recipes:
         v: 3839
         ==: org.bukkit.inventory.ItemStack
         type: LEATHER
-        amount: 32
-      wool:
-        v: 3839
-        ==: org.bukkit.inventory.ItemStack
-        type: WHITE_WOOL
         amount: 16
       iron:
         v: 3839
         ==: org.bukkit.inventory.ItemStack
         type: IRON_INGOT
-        amount: 16
+        amount: 3
     output:
       saddle:
         v: 3839
         ==: org.bukkit.inventory.ItemStack
         type: SADDLE
+        amount: 8
+  make_harness:
+    production_time: 4s
+    name: Make Harnesses
+    type: PRODUCTION
+    input:
+      leather:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: LEATHER
+        amount: 16
+      glass:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: GLASS
+        amount: 6
+      wool:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: WHITE_WOOL
+        amount: 3
+    output:
+      saddle:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: WHITE_HARNESS
         amount: 8
   make_torch:
     production_time: 4s
@@ -8988,7 +9188,7 @@ recipes:
       chain:
         v: 3839
         ==: org.bukkit.inventory.ItemStack
-        type: CHAIN
+        type: IRON_CHAIN
         amount: 64
   make_lantern:
     production_time: 4s
@@ -11748,6 +11948,12 @@ recipes:
           lore:
             - Crack it open for a surprise!
     outputs:
+      display:
+        display:
+          v: 3839
+          ==: org.bukkit.inventory.ItemStack
+          type: EGG
+          amount: 1
       #Food--- 60%
       egg:
         chance: 0.15
@@ -12692,6 +12898,554 @@ recipes:
         ==: org.bukkit.inventory.ItemStack
         type: BUCKET
         amount: 1
+  make_copper_chests:
+    production_time: 4s
+    name: Make Copper Chests
+    type: PRODUCTION
+    input:
+      copper_block:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: COPPER_BLOCK
+        amount: 32
+      chest:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: CHEST
+        amount: 48
+    output:
+      copper_chest:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: COPPER_CHEST
+        amount: 48
+  wax_copper_chests:
+    production_time: 4s
+    name: Wax Copper Chests
+    type: PRODUCTION
+    input:
+      copper_chest:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: COPPER_CHEST
+        amount: 64
+      honeycomb:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: HONEYCOMB
+        amount: 16
+    output:
+      waxed_copper_chest:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: WAXED_COPPER_CHEST
+        amount: 64
+  wax_exposed_copper_chests:
+    production_time: 4s
+    name: Wax Exposed Copper Chests
+    type: PRODUCTION
+    input:
+      exposed_copper_chest:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: EXPOSED_COPPER_CHEST
+        amount: 64
+      honeycomb:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: HONEYCOMB
+        amount: 16
+    output:
+      waxed_exposed_copper_chest:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: WAXED_EXPOSED_COPPER_CHEST
+        amount: 64
+  wax_weathered_copper_chests:
+    production_time: 4s
+    name: Wax Weathered Copper Chests
+    type: PRODUCTION
+    input:
+      weathered_copper_chest:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: WEATHERED_COPPER_CHEST
+        amount: 64
+      honeycomb:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: HONEYCOMB
+        amount: 16
+    output:
+      waxed_weathered_copper_chest:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: WAXED_WEATHERED_COPPER_CHEST
+        amount: 64
+  wax_oxidized_copper_chests:
+    production_time: 4s
+    name: Wax Oxidized Copper Chests
+    type: PRODUCTION
+    input:
+      oxidized_copper_chest:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: OXIDIZED_COPPER_CHEST
+        amount: 64
+      honeycomb:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: HONEYCOMB
+        amount: 16
+    output:
+      waxed_oxidized_copper_chest:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: WAXED_OXIDIZED_COPPER_CHEST
+        amount: 64
+  weather_copper_chests:
+    production_time: 4s
+    fuel_consumption_intervall: 2s
+    name: Weather Copper Chests
+    type: PRODUCTION
+    input:
+      copper_chest:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: COPPER_CHEST
+        amount: 64
+      water_bucket:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: WATER_BUCKET
+        amount: 1
+    output:
+      exposed_copper_chest:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: EXPOSED_COPPER_CHEST
+        amount: 64
+      bucket:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: BUCKET
+        amount: 1
+  weather_exposed_copper_chests:
+    production_time: 6s
+    fuel_consumption_intervall: 2s
+    name: Weather Exposed Copper Chests
+    type: PRODUCTION
+    input:
+      exposed_copper_chest:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: EXPOSED_COPPER_CHEST
+        amount: 64
+      water_bucket:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: WATER_BUCKET
+        amount: 1
+    output:
+      weathered_copper_chest:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: WEATHERED_COPPER_CHEST
+        amount: 64
+      bucket:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: BUCKET
+        amount: 1
+  weather_weathered_copper_chests:
+    production_time: 8s
+    fuel_consumption_intervall: 2s
+    name: Weather Weathered Copper Chests
+    type: PRODUCTION
+    input:
+      weathered_copper_chest:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: WEATHERED_COPPER_CHEST
+        amount: 64
+      water_bucket:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: WATER_BUCKET
+        amount: 1
+    output:
+      oxidized_copper_chest:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: OXIDIZED_COPPER_CHEST
+        amount: 64
+      bucket:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: BUCKET
+        amount: 1
+  make_copper_bars:
+    production_time: 4s
+    name: Make Copper Bars
+    type: PRODUCTION
+    input:
+      copper_block:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: COPPER_BLOCK
+        amount: 4
+    output:
+      copper_bars:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: COPPER_BARS
+        amount: 256
+  wax_copper_bars:
+    production_time: 4s
+    name: Wax Copper Bars
+    type: PRODUCTION
+    input:
+      copper_bars:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: COPPER_BARS
+        amount: 64
+      honeycomb:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: HONEYCOMB
+        amount: 16
+    output:
+      waxed_copper_bars:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: WAXED_COPPER_BARS
+        amount: 64
+  wax_exposed_copper_bars:
+    production_time: 4s
+    name: Wax Exposed Copper Bars
+    type: PRODUCTION
+    input:
+      exposed_copper_bars:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: EXPOSED_COPPER_BARS
+        amount: 64
+      honeycomb:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: HONEYCOMB
+        amount: 16
+    output:
+      waxed_exposed_copper_bars:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: WAXED_EXPOSED_COPPER_BARS
+        amount: 64
+  wax_weathered_copper_bars:
+    production_time: 4s
+    name: Wax Weathered Copper Bars
+    type: PRODUCTION
+    input:
+      weathered_copper_bars:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: WEATHERED_COPPER_BARS
+        amount: 64
+      honeycomb:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: HONEYCOMB
+        amount: 16
+    output:
+      waxed_weathered_copper_bars:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: WAXED_WEATHERED_COPPER_BARS
+        amount: 64
+  wax_oxidized_copper_bars:
+    production_time: 4s
+    name: Wax Oxidized Copper Bars
+    type: PRODUCTION
+    input:
+      oxidized_copper_bars:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: OXIDIZED_COPPER_BARS
+        amount: 64
+      honeycomb:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: HONEYCOMB
+        amount: 16
+    output:
+      waxed_oxidized_copper_bars:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: WAXED_OXIDIZED_COPPER_BARS
+        amount: 64
+  weather_copper_bars:
+    production_time: 4s
+    fuel_consumption_intervall: 2s
+    name: Weather Copper Bars
+    type: PRODUCTION
+    input:
+      copper_bars:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: COPPER_BARS
+        amount: 64
+      water_bucket:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: WATER_BUCKET
+        amount: 1
+    output:
+      exposed_copper_bars:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: EXPOSED_COPPER_BARS
+        amount: 64
+      bucket:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: BUCKET
+        amount: 1
+  weather_exposed_copper_bars:
+    production_time: 6s
+    fuel_consumption_intervall: 2s
+    name: Weather Exposed Copper Bars
+    type: PRODUCTION
+    input:
+      exposed_copper_bars:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: EXPOSED_COPPER_BARS
+        amount: 64
+      water_bucket:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: WATER_BUCKET
+        amount: 1
+    output:
+      weathered_copper_bars:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: WEATHERED_COPPER_BARS
+        amount: 64
+      bucket:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: BUCKET
+        amount: 1
+  weather_weathered_copper_bars:
+    production_time: 8s
+    fuel_consumption_intervall: 2s
+    name: Weather Weathered Copper Bars
+    type: PRODUCTION
+    input:
+      weathered_copper_bars:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: WEATHERED_COPPER_BARS
+        amount: 64
+      water_bucket:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: WATER_BUCKET
+        amount: 1
+    output:
+      oxidized_copper_bars:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: OXIDIZED_COPPER_BARS
+        amount: 64
+      bucket:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: BUCKET
+        amount: 1
+  make_copper_chain:
+    production_time: 4s
+    name: Make Copper Chain
+    type: PRODUCTION
+    input:
+      copper_block:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: COPPER_BLOCK
+        amount: 3
+    output:
+      copper_chain:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: COPPER_CHAIN
+        amount: 64
+  wax_copper_chain:
+    production_time: 4s
+    name: Wax Copper Chain
+    type: PRODUCTION
+    input:
+      copper_chain:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: COPPER_CHAIN
+        amount: 64
+      honeycomb:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: HONEYCOMB
+        amount: 16
+    output:
+      waxed_copper_chain:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: WAXED_COPPER_CHAIN
+        amount: 64
+  wax_exposed_copper_chain:
+    production_time: 4s
+    name: Wax Exposed Copper Chain
+    type: PRODUCTION
+    input:
+      exposed_copper_chain:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: EXPOSED_COPPER_CHAIN
+        amount: 64
+      honeycomb:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: HONEYCOMB
+        amount: 16
+    output:
+      waxed_exposed_copper_chain:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: WAXED_EXPOSED_COPPER_CHAIN
+        amount: 64
+  wax_weathered_copper_chain:
+    production_time: 4s
+    name: Wax Weathered Copper Chain
+    type: PRODUCTION
+    input:
+      weathered_copper_chain:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: WEATHERED_COPPER_CHAIN
+        amount: 64
+      honeycomb:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: HONEYCOMB
+        amount: 16
+    output:
+      waxed_weathered_copper_chain:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: WAXED_WEATHERED_COPPER_CHAIN
+        amount: 64
+  wax_oxidized_copper_chain:
+    production_time: 4s
+    name: Wax Oxidized Copper Chain
+    type: PRODUCTION
+    input:
+      oxidized_copper_chain:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: OXIDIZED_COPPER_CHAIN
+        amount: 64
+      honeycomb:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: HONEYCOMB
+        amount: 16
+    output:
+      waxed_oxidized_copper_chain:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: WAXED_OXIDIZED_COPPER_CHAIN
+        amount: 64
+  weather_copper_chain:
+    production_time: 4s
+    fuel_consumption_intervall: 2s
+    name: Weather Copper Chain
+    type: PRODUCTION
+    input:
+      copper_chain:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: COPPER_CHAIN
+        amount: 64
+      water_bucket:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: WATER_BUCKET
+        amount: 1
+    output:
+      exposed_copper_chain:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: EXPOSED_COPPER_CHAIN
+        amount: 64
+      bucket:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: BUCKET
+        amount: 1
+  weather_exposed_copper_chain:
+    production_time: 6s
+    fuel_consumption_intervall: 2s
+    name: Weather Exposed Copper Chain
+    type: PRODUCTION
+    input:
+      exposed_copper_chain:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: EXPOSED_COPPER_CHAIN
+        amount: 64
+      water_bucket:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: WATER_BUCKET
+        amount: 1
+    output:
+      weathered_copper_chain:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: WEATHERED_COPPER_CHAIN
+        amount: 64
+      bucket:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: BUCKET
+        amount: 1
+  weather_weathered_copper_chain:
+    production_time: 8s
+    fuel_consumption_intervall: 2s
+    name: Weather Weathered Copper Chain
+    type: PRODUCTION
+    input:
+      weathered_copper_chain:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: WEATHERED_COPPER_CHAIN
+        amount: 64
+      water_bucket:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: WATER_BUCKET
+        amount: 1
+    output:
+      oxidized_copper_chain:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: OXIDIZED_COPPER_CHAIN
+        amount: 64
+      bucket:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: BUCKET
+        amount: 1
   make_copper_trapdoors:
     production_time: 4s
     name: Make Copper Trap Doors
@@ -12707,7 +13461,7 @@ recipes:
         v: 3839
         ==: org.bukkit.inventory.ItemStack
         type: COPPER_TRAPDOOR
-        amount: 48
+        amount: 64
   wax_copper_trapdoors:
     production_time: 4s
     name: Wax Copper Trap Doors
@@ -12951,6 +13705,12 @@ recipes:
           lore:
             - Crack me in a factory for a prize!
     outputs:
+      display:
+        display:
+          v: 3839
+          ==: org.bukkit.inventory.ItemStack
+          type: PRISMARINE_SHARD
+          amount: 1
       # Trash - 70% of total (0.175 each)
       cobblestone:
         chance: 0.175
@@ -13309,139 +14069,153 @@ recipes:
           ==: org.bukkit.inventory.ItemStack
           type: ARMADILLO_SPAWN_EGG
           amount: 1
-      # Music Disks - 1% of total (0.000526 each)
+      # Music Disks - 1% of total (0.000476 each)
       record_13:
-        chance: 0.000526
+        chance: 0.000476
         record_13:
           v: 3839
           ==: org.bukkit.inventory.ItemStack
           type: MUSIC_DISC_13
           amount: 1
       record_cats:
-        chance: 0.000526
+        chance: 0.000476
         record_cats:
           v: 3839
           ==: org.bukkit.inventory.ItemStack
           type: MUSIC_DISC_CAT
           amount: 1
       record_blocks:
-        chance: 0.000526
+        chance: 0.000476
         record_blocks:
           v: 3839
           ==: org.bukkit.inventory.ItemStack
           type: MUSIC_DISC_BLOCKS
           amount: 1
       record_chirp:
-        chance: 0.000526
+        chance: 0.000476
         record_chirp:
           v: 3839
           ==: org.bukkit.inventory.ItemStack
           type: MUSIC_DISC_CHIRP
           amount: 1
       record_far:
-        chance: 0.000526
+        chance: 0.000476
         record_far:
           v: 3839
           ==: org.bukkit.inventory.ItemStack
           type: MUSIC_DISC_FAR
           amount: 1
       record_mall:
-        chance: 0.000526
+        chance: 0.000476
         record_mall:
           v: 3839
           ==: org.bukkit.inventory.ItemStack
           type: MUSIC_DISC_MALL
           amount: 1
       record_mellohi:
-        chance: 0.000526
+        chance: 0.000476
         record_mellohi:
           v: 3839
           ==: org.bukkit.inventory.ItemStack
           type: MUSIC_DISC_MELLOHI
           amount: 1
       record_stal:
-        chance: 0.000526
+        chance: 0.000476
         record_stal:
           v: 3839
           ==: org.bukkit.inventory.ItemStack
           type: MUSIC_DISC_STAL
           amount: 1
       record_strad:
-        chance: 0.000526
+        chance: 0.000476
         record_strad:
           v: 3839
           ==: org.bukkit.inventory.ItemStack
           type: MUSIC_DISC_STRAD
           amount: 1
       record_ward:
-        chance: 0.000526
+        chance: 0.000476
         record_ward:
           v: 3839
           ==: org.bukkit.inventory.ItemStack
           type: MUSIC_DISC_WARD
           amount: 1
       record_11:
-        chance: 0.000526
+        chance: 0.000476
         record_11:
           v: 3839
           ==: org.bukkit.inventory.ItemStack
           type: MUSIC_DISC_11
           amount: 1
       record_wait:
-        chance: 0.000526
+        chance: 0.000476
         record_wait:
           v: 3839
           ==: org.bukkit.inventory.ItemStack
           type: MUSIC_DISC_WAIT
           amount: 1
       record_pigstep:
-        chance: 0.000526
+        chance: 0.000476
         record_pigstep:
           v: 3839
           ==: org.bukkit.inventory.ItemStack
           type: MUSIC_DISC_PIGSTEP
           amount: 1
       record_otherside:
-        chance: 0.000526
+        chance: 0.000476
         record_otherside:
           v: 3839
           ==: org.bukkit.inventory.ItemStack
           type: MUSIC_DISC_OTHERSIDE
           amount: 1
       record_relic:
-        chance: 0.000526
+        chance: 0.000476
         record_relic:
           v: 3839
           ==: org.bukkit.inventory.ItemStack
           type: MUSIC_DISC_RELIC
           amount: 1
       record_5:
-        chance: 0.000526
+        chance: 0.000476
         record_5:
           v: 3839
           ==: org.bukkit.inventory.ItemStack
           type: MUSIC_DISC_5
           amount: 1
       record_precipice:
-        chance: 0.000526
+        chance: 0.000476
         record_5:
           v: 3839
           ==: org.bukkit.inventory.ItemStack
           type: MUSIC_DISC_PRECIPICE
           amount: 1
       record_creator:
-        chance: 0.000526
+        chance: 0.000476
         record_5:
           v: 3839
           ==: org.bukkit.inventory.ItemStack
           type: MUSIC_DISC_CREATOR
           amount: 1
       record_creator_music_box:
-        chance: 0.000526
+        chance: 0.000476
         record_5:
           v: 3839
           ==: org.bukkit.inventory.ItemStack
           type: MUSIC_DISC_CREATOR_MUSIC_BOX
+          amount: 1
+      record_tears:
+        chance: 0.000476
+        record_5:
+          v: 3839
+          ==: org.bukkit.inventory.ItemStack
+          type: MUSIC_DISC_TEARS
+          amount: 1
+      record_lava_chicken:
+        chance: 0.000476
+        record_5:
+          v: 3839
+          ==: org.bukkit.inventory.ItemStack
+          type: MUSIC_DISC_LAVA_CHICKEN
           amount: 1
       #Resources - 25% (Divided seperately over all below)
       iron_ingot:
@@ -13851,32 +14625,39 @@ recipes:
           type: BEACON
           amount: 1
       diamond_horse_armor:
-        chance: 0.00012
+        chance: 0.0001
         diamond_horse_armor:
           v: 3839
           ==: org.bukkit.inventory.ItemStack
           type: DIAMOND_HORSE_ARMOR
           amount: 1
       golden_horse_armor:
-        chance: 0.00012
+        chance: 0.0001
         golden_horse_armor:
           v: 3839
           ==: org.bukkit.inventory.ItemStack
           type: GOLDEN_HORSE_ARMOR
           amount: 1
       iron_horse_armor:
-        chance: 0.00012
+        chance: 0.0001
         iron_horse_armor:
           v: 3839
           ==: org.bukkit.inventory.ItemStack
           type: IRON_HORSE_ARMOR
           amount: 1
       leather_horse_armor:
-        chance: 0.00012
+        chance: 0.0001
         leather_horse_armor:
           v: 3839
           ==: org.bukkit.inventory.ItemStack
           type: LEATHER_HORSE_ARMOR
+          amount: 1
+      copper_horse_armor:
+        chance: 0.0001
+        copper_horse_armor:
+          v: 3839
+          ==: org.bukkit.inventory.ItemStack
+          type: COPPER_HORSE_ARMOR
           amount: 1
       jukebox:
         chance: 0.0092974999
@@ -14318,6 +15099,28 @@ recipes:
         ==: org.bukkit.inventory.ItemStack
         type: DEAD_BUSH
         amount: 16
+  grow_dry_grass:
+    production_time: 4s
+    fuel_consumption_intervall: 1s
+    name: Grow dry grass
+    type: PRODUCTION
+    input:
+      sand:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: SAND
+        amount: 64
+      cobweb:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: COBWEB
+        amount: 64
+    output:
+      short_dry_grass:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: SHORT_DRY_GRASS
+        amount: 32
   root_dirt:
     production_time: 4s
     fuel_consumption_intervall: 1s
@@ -16601,3 +17404,113 @@ recipes:
         type: LAPIS_BLOCK
         amount: 56
     health_gained: 10000
+  charge_wind_essence:
+    production_time: 4s
+    name: Charge Wind Essence
+    type: PRODUCTION
+    input:
+      wind_essence:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: PAPER
+        amount: 4
+        meta:
+          meta-type: UNSPECIFIC
+          ==: ItemMeta
+          display-name: §fWind Essence
+      diamond:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: DIAMOND
+        amount: 3
+      quartz:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: QUARTZ
+        amount: 32
+    output:
+      wind_charge:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: WIND_CHARGE
+        amount: 4
+  make_maces:
+    production_time: 4s
+    name: Make Maces
+    type: PRODUCTION
+    input:
+      breeze_rod:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: BREEZE_ROD
+        amount: 3
+      heavy_core:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: HEAVY_CORE
+        amount: 3
+    output:
+      mace:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: MACE
+        amount: 5
+  repair_kinetics_factory:
+    production_time: 4s
+    name: Repair Factory
+    type: REPAIR
+    input:
+      wind_essence:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: PAPER
+        amount: 8
+        meta:
+          meta-type: UNSPECIFIC
+          ==: ItemMeta
+          display-name: §fWind Essence
+      breeze_rod:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: BREEZE_ROD
+        amount: 1
+    health_gained: 10000
+  make_mob_repellators:
+    forceInclude: true
+    production_time: 4s
+    name: Make Mob Repellators
+    type: PRODUCTION
+    input:
+      heavy_core:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: HEAVY_CORE
+        amount: 1
+      diamond:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: DIAMOND
+        amount: 64
+      essence:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: ENDER_EYE
+        amount: 24
+        meta:
+          meta-type: UNSPECIFIC
+          ==: ItemMeta
+          display-name: Player Essence
+          lore:
+            - Activity reward used to fuel pearls
+    output:
+      mob_repellator:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: FLETCHING_TABLE
+        meta:
+          meta-type: UNSPECIFIC
+          ==: ItemMeta
+          display-name: Mob Repellator
+          lore:
+            - Blocks mob spawns in a 96 block radius cylinder
+        amount: 4

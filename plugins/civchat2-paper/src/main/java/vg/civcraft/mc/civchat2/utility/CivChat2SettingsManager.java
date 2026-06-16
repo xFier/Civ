@@ -23,7 +23,9 @@ public class CivChat2SettingsManager {
     private LongSetting chatUnmuteTimer;
     private EnumSetting<KillMessageFormat> killMessageFormat;
     private BooleanSetting showAFKStatus;
+    private BooleanSetting showPrefix;
     private DisplayLocationSetting afkStatusLocation;
+    private BooleanSetting showGroupColors;
 
     public CivChat2SettingsManager() {
         initSettings();
@@ -71,6 +73,13 @@ public class CivChat2SettingsManager {
         afkStatusLocation = new DisplayLocationSetting(CivChat2.getInstance(), DisplayLocationSetting.DisplayLocation.SIDEBAR,
             "AFK Status Location", "afkStatusLocation", new ItemStack(Material.ARROW), "the AFK status");
         PlayerSettingAPI.registerSetting(afkStatusLocation, menu);
+
+        showPrefix = new BooleanSetting(CivChat2.getInstance(), true, "Show vanity prefix", "showPrefix",
+            "Should the star prefix be shown?");
+        PlayerSettingAPI.registerSetting(showPrefix, menu);
+        showGroupColors = new BooleanSetting(CivChat2.getInstance(), true, "Show group colors in chat", "showGroupColors",
+            "Disabling this setting will make all group colors in chat, gray");
+        PlayerSettingAPI.registerSetting(showGroupColors, menu);
     }
 
     public LongSetting getGlobalChatMuteSetting() {
@@ -110,6 +119,14 @@ public class CivChat2SettingsManager {
     }
 
     public boolean getShowAFKStatus(UUID uuid) {return showAFKStatus.getValue(uuid); }
+
+    public boolean isShowPrefix(UUID uuid) {
+        return showPrefix.getValue(uuid);
+    }
+
+    public boolean showGroupColors(UUID uuid) {
+        return showGroupColors.getValue(uuid);
+    }
 
     public DisplayLocationSetting getAfkStatusLocation() { return afkStatusLocation; }
 

@@ -22,7 +22,7 @@ import vg.civcraft.mc.civmodcore.utilities.CivLogger;
 import vg.civcraft.mc.civmodcore.world.locations.chunkmeta.CacheState;
 import vg.civcraft.mc.civmodcore.world.locations.global.LocationTrackable;
 import vg.civcraft.mc.namelayer.GroupManager;
-import vg.civcraft.mc.namelayer.NameAPI;
+import vg.civcraft.mc.namelayer.NameLayerAPI;
 import vg.civcraft.mc.namelayer.group.Group;
 import vg.civcraft.mc.namelayer.permission.PermissionType;
 
@@ -36,6 +36,7 @@ public class Snitch extends LocationTrackable {
     private Map<Class<? extends AbstractSnitchAppender>, AbstractSnitchAppender> appenders;
     private FieldManager fieldManager;
     private SnitchFactoryType type;
+    private UUID placer;
     private boolean active;
 
     /**
@@ -50,13 +51,14 @@ public class Snitch extends LocationTrackable {
      * @param name             Name of the snitch
      */
     public Snitch(int snitchID, Location loc, boolean isNew, int groupID,
-                  Function<Snitch, FieldManager> fieldManagerFunc, SnitchFactoryType type, String name) {
+                  Function<Snitch, FieldManager> fieldManagerFunc, SnitchFactoryType type, String name, UUID placer) {
         super(isNew, loc);
         this.snitchId = snitchID;
         this.groupID = groupID;
         this.name = name;
         this.fieldManager = fieldManagerFunc.apply(this);
         this.type = type;
+        this.placer = placer;
         this.appenders = new HashMap<>();
         this.active = true;
     }
@@ -112,7 +114,7 @@ public class Snitch extends LocationTrackable {
      * false otherwise
      */
     public boolean hasPermission(UUID uuid, PermissionType permission) {
-        return NameAPI.getGroupManager().hasAccess(getGroup(), uuid, permission);
+        return NameLayerAPI.getGroupManager().hasAccess(getGroup(), uuid, permission);
     }
 
     /**
@@ -272,6 +274,10 @@ public class Snitch extends LocationTrackable {
      */
     public void applyToAppenders(Consumer<AbstractSnitchAppender> con) {
         appenders.values().forEach(con);
+    }
+
+    public UUID getPlacer() {
+        return placer;
     }
 
     @Override

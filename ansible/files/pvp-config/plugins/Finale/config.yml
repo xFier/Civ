@@ -91,12 +91,21 @@ gapples:
 
 #allows adjusting the attack damage of any item by its spigot material identifier
 weaponModification:
+  mace:
+    material: MACE
+    damage: 6
+    armourDamageMultiplier: 2
   netheriteAxe:
     material: NETHERITE_AXE
     damage: 6
-    armourDamageMultiplier: 2
   diamondAxe:
     material: DIAMOND_AXE
+    damage: 5
+  copperAxe:
+    material: COPPER_AXE
+    damage: 5
+  copperSword:
+    material: COPPER_SWORD
     damage: 5
   ironAxe:
     material: IRON_AXE
@@ -165,46 +174,46 @@ armourModification:
   netheriteHelmet:
     material: NETHERITE_HELMET
     armour: 4
-    toughness: 3
+    toughness: 2.75
     extraDurabilityHits: 1
     knockbackResistance: 0 # knockback resistance is a value between 0 and 1.
   netheriteChestplate:
     material: NETHERITE_CHESTPLATE
     armour: 8
-    toughness: 3
+    toughness: 2.75
     extraDurabilityHits: 1
     knockbackResistance: 0.1
   netheriteLeggings:
     material: NETHERITE_LEGGINGS
     armour: 6
-    toughness: 3
+    toughness: 2.75
     extraDurabilityHits: 1
     knockbackResistance: 0.1
   netheriteBoots:
     material: NETHERITE_BOOTS
     armour: 4
-    toughness: 3
+    toughness: 2.75
     extraDurabilityHits: 1
     knockbackResistance: 0
   meteoricIronHelmet:
     key: meteoric_iron_helmet
     armour: 4
-    toughness: 2
+    toughness: 2.2
     extraDurabilityHits: 1
   meteoricIronChestplate:
     key: meteoric_iron_chestplate
     armour: 8
-    toughness: 3
+    toughness: 2.4
     extraDurabilityHits: 1
   meteoricIronLeggings:
     key: meteoric_iron_leggings
     armour: 6
-    toughness: 2
+    toughness: 2.4
     extraDurabilityHits: 1
   meteoricIronBoots:
     key: meteoric_iron_boots
     armour: 4
-    toughness: 2
+    toughness: 2.2
     extraDurabilityHits: 1
 
 #allows disabling enchantments. Use official spigot identifiers from https://hub.spigotmc.org/javadocs/spigot/org/bukkit/enchantments/Enchantment.html
@@ -296,7 +305,7 @@ damageModifiers:
     multiplier: 1.0
   CRIT:
     mode: DIRECT
-    multiplier: 0.82
+    multiplier: 0.825
   STRENGTH_EFFECT:
     mode: DIRECT
     multiplier: 0.86
@@ -486,7 +495,7 @@ tippedArrows:
   slow: &slow
     name: Arrow of Slowness
     type: slowness
-    duration: 220
+    duration: 74
     color:
       r: 89
       g: 103
@@ -494,11 +503,11 @@ tippedArrows:
   long_slow:
     <<: *slow
     type: long_slowness
-    duration: 600
+    duration: 200
   strong_slow:
     <<: *slow
     type: strong_slowness
-    duration: 40
+    duration: 20
   turtle_master: &turtle_master
     name: Arrow of Turtle Master
     type: turtle_master
@@ -530,7 +539,7 @@ tippedArrows:
   poison: &poison
     name: Arrow of Poison
     type: poison
-    duration: 100
+    duration: 34
     color:
       r: 94
       g: 129
@@ -538,11 +547,11 @@ tippedArrows:
   long_poison:
     <<: *poison
     type: long_poison
-    duration: 220
+    duration: 74
   strong_poison:
     <<: *poison
     type: strong_poison
-    duration: 40
+    duration: 20
   regen: &regen
     name: Arrow of Regeneration
     type: regeneration
@@ -578,7 +587,7 @@ tippedArrows:
   weakness: &weakness
     name: Arrow of Weakness
     type: weakness
-    duration: 220
+    duration: 74
     color:
       r: 110
       g: 28
@@ -586,7 +595,7 @@ tippedArrows:
   long_weakness:
     <<: *weakness
     type: long_weakness
-    duration: 600
+    duration: 200
   luck:
     name: Arrow of Luck
     type: luck
@@ -641,3 +650,9 @@ netheriteFireResistance: true
 meteoricIronSlowness: true
 
 fireworkExplosions: true
+rebalanceTntMinecart: true
+
+mace:
+  cooldown: 800
+  max_damage: 38
+  wind_cooldown: 3

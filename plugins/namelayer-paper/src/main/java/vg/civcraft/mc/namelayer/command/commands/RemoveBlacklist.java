@@ -9,7 +9,7 @@ import org.bukkit.ChatColor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import vg.civcraft.mc.namelayer.GroupManager;
-import vg.civcraft.mc.namelayer.NameAPI;
+import vg.civcraft.mc.namelayer.NameLayerAPI;
 import vg.civcraft.mc.namelayer.NameLayerPlugin;
 import vg.civcraft.mc.namelayer.command.BaseCommandMiddle;
 import vg.civcraft.mc.namelayer.group.BlackList;
@@ -40,7 +40,7 @@ public class RemoveBlacklist extends BaseCommandMiddle {
             p.sendMessage(ChatColor.RED + "You do not have the required permissions to do this");
             return;
         }
-        UUID targetUUID = NameAPI.getUUID(targetPlayer);
+        UUID targetUUID = NameLayerAPI.getUUID(targetPlayer);
         if (targetUUID == null) {
             p.sendMessage(ChatColor.RED + "This player does not exist");
             return;
@@ -50,7 +50,18 @@ public class RemoveBlacklist extends BaseCommandMiddle {
             p.sendMessage(ChatColor.RED + "This player is not blacklisted");
             return;
         }
-        bl.removeBlacklistMember(g, targetUUID, true);
-        p.sendMessage(ChatColor.GREEN + NameAPI.getCurrentName(targetUUID) + " was successfully removed from the blacklist for the group " + g.getName());
+        bl.removeBlacklistMemberAsync(
+            p.getUniqueId(),
+            g,
+            targetUUID,
+            p.isOp() || p.hasPermission("namelayer.admin"),
+            result -> {
+                if (result.success()) {
+                    p.sendMessage(ChatColor.GREEN + NameLayerAPI.getCurrentName(targetUUID) + " was successfully removed from the blacklist for the group " + g.getName());
+                } else {
+                    p.sendMessage(ChatColor.RED + result.message());
+                }
+            }
+        );
     }
 }

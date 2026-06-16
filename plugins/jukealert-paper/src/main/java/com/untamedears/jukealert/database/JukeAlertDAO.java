@@ -5,11 +5,9 @@ import com.untamedears.jukealert.SnitchManager;
 import com.untamedears.jukealert.model.Snitch;
 import com.untamedears.jukealert.model.SnitchFactoryType;
 import com.untamedears.jukealert.model.SnitchTypeManager;
-import com.untamedears.jukealert.model.actions.ActionCacheState;
 import com.untamedears.jukealert.model.actions.LoggedActionFactory;
 import com.untamedears.jukealert.model.actions.LoggedActionPersistence;
 import com.untamedears.jukealert.model.actions.abstr.LoggableAction;
-import com.untamedears.jukealert.model.actions.abstr.LoggablePlayerAction;
 import com.untamedears.jukealert.model.appender.AbstractSnitchAppender;
 import com.untamedears.jukealert.model.appender.DormantCullingAppender;
 import com.untamedears.jukealert.model.appender.LeverToggleAppender;
@@ -25,9 +23,11 @@ import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.function.Consumer;
@@ -52,7 +52,7 @@ import vg.civcraft.mc.civmodcore.world.locations.global.GlobalLocationTracker;
 import vg.civcraft.mc.civmodcore.world.locations.global.GlobalTrackableDAO;
 import vg.civcraft.mc.civmodcore.world.locations.global.WorldIDManager;
 import vg.civcraft.mc.namelayer.GroupManager;
-import vg.civcraft.mc.namelayer.NameAPI;
+import vg.civcraft.mc.namelayer.NameLayerAPI;
 import vg.civcraft.mc.namelayer.group.Group;
 
 public class JukeAlertDAO extends GlobalTrackableDAO<Snitch> {
@@ -179,7 +179,7 @@ public class JukeAlertDAO extends GlobalTrackableDAO<Snitch> {
                             int z = rs.getInt(8);
 
                             actor = ChatColor.stripColor(actor);
-                            UUID actorUUID = NameAPI.getUUID(actor);
+                            UUID actorUUID = NameLayerAPI.getUUID(actor);
                             if (actorUUID == null) {
                                 actorUUID = UUID.fromString("8326bc56-1ed9-40ff-8f24-46bf3e300e51");
                             }
@@ -255,6 +255,7 @@ public class JukeAlertDAO extends GlobalTrackableDAO<Snitch> {
             "delete from snitchs using snitchs, snitchs s2 where snitchs.snitch_id < s2.snitch_id "
                 + "and snitchs.snitch_x = s2.snitch_x and snitchs.snitch_y = s2.snitch_y and snitchs.snitch_z = s2.snitch_z and snitchs.snitch_world=s2.snitch_world");
         db.registerMigration(3, false, "delete from ja_snitches where group_id = -1");
+        db.registerMigration(4, false, "alter table ja_snitches add column placer VARCHAR(36)");
     }
 
     // ------------------------------------------------------------
@@ -275,7 +276,7 @@ public class JukeAlertDAO extends GlobalTrackableDAO<Snitch> {
         final Location snitchLocation = snitch.getLocation();
         try (final Connection connection = this.db.getConnection();
              final PreparedStatement statement = connection.prepareStatement(
-                 "INSERT INTO ja_snitches (group_id,type_id,x,y,z,world_id,name) VALUES (?,?,?,?,?,?,?);",
+                 "INSERT INTO ja_snitches (group_id,type_id,x,y,z,world_id,name, placer) VALUES (?,?,?,?,?,?,?, ?);",
                  Statement.RETURN_GENERATED_KEYS)) {
             statement.setInt(1, snitchGroup.getGroupId());
             statement.setInt(2, snitch.getType().getID());
@@ -284,6 +285,7 @@ public class JukeAlertDAO extends GlobalTrackableDAO<Snitch> {
             statement.setInt(5, snitchLocation.getBlockZ());
             statement.setShort(6, getWorldID(snitchLocation));
             statement.setString(7, snitch.getName());
+            statement.setString(8, snitch.getPlacer() == null ? null : snitch.getPlacer().toString());
             statement.execute();
             try (final ResultSet results = statement.getGeneratedKeys()) {
                 if (!results.next()) {
@@ -344,9 +346,12 @@ public class JukeAlertDAO extends GlobalTrackableDAO<Snitch> {
         final SnitchTypeManager snitchTypeManager = JukeAlert.getInstance().getSnitchConfigManager();
         final SnitchManager snitchManager = JukeAlert.getInstance().getSnitchManager();
         final WorldIDManager worldIDManager = CivModCorePlugin.getInstance().getWorldIdManager();
+
+        Set<Short> unknownWorldIds = new HashSet<>();
+
         try (final Connection connection = this.db.getConnection();
              final PreparedStatement statement = connection.prepareStatement(
-                 "SELECT ja_snitches.id, x, y, z, world_id, type_id, group_id, name, last_refresh, toggle_lever FROM ja_snitches" +
+                 "SELECT ja_snitches.id, x, y, z, world_id, type_id, group_id, name, last_refresh, toggle_lever, placer FROM ja_snitches" +
                      " LEFT JOIN ja_snitch_refresh ON ja_snitches.id = ja_snitch_refresh.id" +
                      " LEFT JOIN ja_snitch_lever ON ja_snitches.id = ja_snitch_lever.id");
              final ResultSet results = statement.executeQuery()) {
@@ -358,8 +363,10 @@ public class JukeAlertDAO extends GlobalTrackableDAO<Snitch> {
                 final short snitchWorldID = results.getShort(5);
                 final World snitchWorld = worldIDManager.getWorldByInternalID(snitchWorldID);
                 if (snitchWorld == null) {
-                    this.logger.warning(
-                        "Could not load world [" + snitchWorldID + "] for snitch [" + snitchID + "]");
+                    if (unknownWorldIds.add(snitchWorldID)) {
+                        this.logger.warning(
+                            "Could not load world [" + snitchWorldID + "] for snitch [" + snitchID + "]");
+                    }
                     continue;
                 }
                 final int snitchTypeID = results.getInt(6);
@@ -382,10 +389,13 @@ public class JukeAlertDAO extends GlobalTrackableDAO<Snitch> {
 
                 boolean toggleLever = results.getBoolean(10);
 
+                String placerString = results.getString(11);
+                UUID placer = placerString == null ? null : UUID.fromString(placerString);
+
                 // Add the snitch to the system
                 Snitch snitch = snitchType.create(snitchID,
                     new Location(snitchWorld, snitchX, snitchY, snitchZ),
-                    snitchName, groupID, false);
+                    snitchName, groupID, false, placer);
                 callback.accept(snitch);
                 snitchManager.addSnitchToQuadTree(snitch);
                 DormantCullingAppender dormantCullingAppender = snitch.getAppender(DormantCullingAppender.class);

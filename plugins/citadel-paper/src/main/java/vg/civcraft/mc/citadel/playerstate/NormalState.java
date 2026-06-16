@@ -10,7 +10,7 @@ import vg.civcraft.mc.citadel.Citadel;
 import vg.civcraft.mc.citadel.CitadelUtility;
 import vg.civcraft.mc.citadel.reinforcementtypes.ReinforcementType;
 import vg.civcraft.mc.namelayer.GroupManager;
-import vg.civcraft.mc.namelayer.NameAPI;
+import vg.civcraft.mc.namelayer.NameLayerAPI;
 import vg.civcraft.mc.namelayer.group.Group;
 
 public class NormalState extends AbstractPlayerState {
@@ -35,12 +35,12 @@ public class NormalState extends AbstractPlayerState {
         if (type == null) {
             return;
         }
-        String defaultGroupName = NameAPI.getGroupManager().getDefaultGroup(player.getUniqueId());
+        String defaultGroupName = NameLayerAPI.getGroupManager().getDefaultGroup(player.getUniqueId());
         Group defaultGroup = GroupManager.getGroup(defaultGroupName);
         if (defaultGroup == null) {
             return;
         }
-        CitadelUtility.attemptReinforcementCreation(e.getBlock(), type, defaultGroup, player);
+        CitadelUtility.attemptReinforcementCreation(e.getBlock(), type, defaultGroup, defaultGroup.getName(), player);
     }
 
     @Override
@@ -57,12 +57,12 @@ public class NormalState extends AbstractPlayerState {
         if (type == null) {
             return;
         }
-        String defaultGroupName = NameAPI.getGroupManager().getDefaultGroup(player.getUniqueId());
+        String defaultGroupName = NameLayerAPI.getGroupManager().getDefaultGroup(player.getUniqueId());
         Group defaultGroup = GroupManager.getGroup(defaultGroupName);
         if (defaultGroup == null) {
             return;
         }
-        CitadelUtility.attemptReinforcementCreation(e.getClickedBlock(), type, defaultGroup, player);
+        CitadelUtility.attemptReinforcementCreation(e.getClickedBlock(), type, defaultGroup, defaultGroup.getName(), player);
     }
 
     @Override

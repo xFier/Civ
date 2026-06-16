@@ -8,8 +8,9 @@ import java.util.UUID;
 import org.bukkit.ChatColor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
+import vg.civcraft.mc.namelayer.GroupManager;
 import vg.civcraft.mc.namelayer.GroupManager.PlayerType;
-import vg.civcraft.mc.namelayer.NameAPI;
+import vg.civcraft.mc.namelayer.NameLayerAPI;
 import vg.civcraft.mc.namelayer.command.BaseCommandMiddle;
 import vg.civcraft.mc.namelayer.group.Group;
 import vg.civcraft.mc.namelayer.permission.PermissionType;
@@ -26,43 +27,36 @@ public class RemoveMember extends BaseCommandMiddle {
             return;
         }
         Player p = (Player) sender;
-        Group group = gm.getGroup(groupName);
+        Group group = GroupManager.getGroup(groupName);
         if (groupIsNull(sender, groupName, group)) {
             return;
         }
         if (group.isDisciplined()) {
-            p.sendMessage(ChatColor.RED + "This group is disiplined.");
+            p.sendMessage(ChatColor.RED + "This group is disciplined.");
             return;
         }
-        UUID executor = NameAPI.getUUID(p.getName());
-        UUID uuid = NameAPI.getUUID(targetPlayer);
+        UUID executor = NameLayerAPI.getUUID(p.getName());
+        UUID uuid = NameLayerAPI.getUUID(targetPlayer);
 
         if (uuid == null) {
             p.sendMessage(ChatColor.RED + "The player has never played before.");
             return;
         }
 
-        String playerName = NameAPI.getCurrentName(uuid);
+        String playerName = NameLayerAPI.getCurrentName(uuid);
         PlayerType toBeRemoved = group.getPlayerType(uuid);
         if (toBeRemoved == null) {
             //hides who is actually on the group
             toBeRemoved = PlayerType.MEMBERS;
         }
-        boolean allowed = false;
-        switch (toBeRemoved) { // depending on the type the executor wants to add the player to
-            case MEMBERS:
-                allowed = gm.hasAccess(group, executor, PermissionType.getPermission("MEMBERS"));
-                break;
-            case MODS:
-                allowed = gm.hasAccess(group, executor, PermissionType.getPermission("MODS"));
-                break;
-            case ADMINS:
-                allowed = gm.hasAccess(group, executor, PermissionType.getPermission("ADMINS"));
-                break;
-            case OWNER:
-                allowed = gm.hasAccess(group, executor, PermissionType.getPermission("OWNER"));
-                break;
-        }
+
+        boolean allowed = switch (toBeRemoved) { // depending on the type the executor wants to add the player to
+            case MEMBERS -> gm.hasAccess(group, executor, PermissionType.getPermission("MEMBERS"));
+            case MODS -> gm.hasAccess(group, executor, PermissionType.getPermission("MODS"));
+            case ADMINS -> gm.hasAccess(group, executor, PermissionType.getPermission("ADMINS"));
+            case OWNER -> gm.hasAccess(group, executor, PermissionType.getPermission("OWNER"));
+            default -> false;
+        };
 
         if (!allowed && !(p.isOp() || p.hasPermission("namelayer.admin"))) {
             p.sendMessage(ChatColor.RED + "You do not have permissions to modify this group.");
@@ -80,7 +74,12 @@ public class RemoveMember extends BaseCommandMiddle {
             return;
         }
 
-        p.sendMessage(ChatColor.GREEN + playerName + " has been removed from the group.");
-        group.removeMember(uuid);
+        group.removeMemberAsync(executor, uuid, result -> {
+            if (result.success()) {
+                p.sendMessage(ChatColor.GREEN + playerName + " has been removed from the group.");
+            } else {
+                p.sendMessage(ChatColor.RED + result.message());
+            }
+        });
     }
 }

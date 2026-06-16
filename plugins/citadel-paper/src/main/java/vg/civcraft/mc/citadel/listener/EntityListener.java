@@ -1,12 +1,10 @@
 package vg.civcraft.mc.citadel.listener;
 
+import io.papermc.paper.event.entity.ItemTransportingEntityValidateTargetEvent;
+import io.papermc.paper.event.player.PlayerOpenSignEvent;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.UUID;
-
-
-import io.papermc.paper.event.player.PlayerOpenSignEvent;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
@@ -21,6 +19,7 @@ import org.bukkit.entity.Hanging;
 import org.bukkit.entity.ItemFrame;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.WindCharge;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -36,8 +35,6 @@ import org.bukkit.event.hanging.HangingBreakEvent;
 import org.bukkit.event.hanging.HangingPlaceEvent;
 import org.bukkit.event.player.PlayerBucketFillEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
-import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.scheduler.BukkitRunnable;
 import vg.civcraft.mc.citadel.Citadel;
 import vg.civcraft.mc.citadel.CitadelPermissionHandler;
 import vg.civcraft.mc.citadel.CitadelUtility;
@@ -48,13 +45,11 @@ import vg.civcraft.mc.civmodcore.inventory.items.ItemUtils;
 import vg.civcraft.mc.civmodcore.players.settings.PlayerSettingAPI;
 import vg.civcraft.mc.civmodcore.players.settings.impl.BooleanSetting;
 import vg.civcraft.mc.namelayer.GroupManager;
-import vg.civcraft.mc.namelayer.NameAPI;
-import vg.civcraft.mc.namelayer.NameLayerPlugin;
-import vg.civcraft.mc.namelayer.database.GroupManagerDao;
+import vg.civcraft.mc.namelayer.NameLayerAPI;
 
 public class EntityListener implements Listener {
 
-    protected GroupManager gm = NameAPI.getGroupManager();
+    protected GroupManager gm = NameLayerAPI.getGroupManager();
 
     // prevent zombies from breaking reinforced doors
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
@@ -149,49 +144,48 @@ public class EntityListener implements Listener {
             if (rein == null) {
                 continue;
             }
-            ReinforcementLogic.damageReinforcement(rein, ReinforcementLogic.getDamageApplied(rein, null, null), eee.getEntity());
-            if (!rein.isBroken()) {
-                iterator.remove();
+            switch (eee.getExplosionResult()) {
+                case TRIGGER_BLOCK -> {
+                    if (rein.isInsecure()) {
+                        continue;
+                    }
+                    if (eee.getEntity() instanceof WindCharge charge && charge.getShooter() instanceof Player shooter && rein.hasPermission(shooter, CitadelPermissionHandler.getBypass())) {
+                        continue;
+                    }
+                    iterator.remove();
+                }
+                case DESTROY, DESTROY_WITH_DECAY -> {
+                    ReinforcementLogic.damageReinforcement(rein, ReinforcementLogic.getDamageApplied(rein, null, null), eee.getEntity());
+                    if (!rein.isBroken()) {
+                        iterator.remove();
+                    }
+                }
             }
         }
     }
 
     private List<Block> getGolemBlocks(EntityType type, Block base) {
-        ArrayList<Block> blocks = new ArrayList<>();
-        blocks.add(base);
-        base = base.getRelative(BlockFace.UP);
-        blocks.add(base);
-        if (type == EntityType.IRON_GOLEM) {
-            for (BlockFace face : new BlockFace[]{BlockFace.NORTH, BlockFace.SOUTH, BlockFace.EAST,
-                BlockFace.WEST}) {
-                Block arm = base.getRelative(face);
-                if (arm.getType() == Material.IRON_BLOCK)
-                    blocks.add(arm);
-            }
-        }
-        base = base.getRelative(BlockFace.UP);
-        blocks.add(base);
-        return blocks;
-    }
-
-    @EventHandler(priority = EventPriority.HIGHEST)
-    public void playerJoinEvent(PlayerJoinEvent event) {
-        Player p = event.getPlayer();
-        final UUID uuid = p.getUniqueId();
-
-
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                GroupManagerDao db = NameLayerPlugin.getGroupManagerDao();
-                for (String groupName : db.getGroupNames(uuid)) {
-                    if (NameAPI.getGroupManager().hasAccess(groupName, uuid,
-                        CitadelPermissionHandler.getBypass())) {
-                        GroupManager.getGroup(groupName).updateActivityTimeStamp();
-                    }
+        List<Block> blocks = new ArrayList<>();
+        if (type == EntityType.COPPER_GOLEM) {
+            blocks.add(base);
+            base = base.getRelative(BlockFace.UP);
+            blocks.add(base);
+        } else {
+            blocks.add(base);
+            base = base.getRelative(BlockFace.UP);
+            blocks.add(base);
+            if (type == EntityType.IRON_GOLEM) {
+                for (BlockFace face : new BlockFace[]{BlockFace.NORTH, BlockFace.SOUTH, BlockFace.EAST,
+                    BlockFace.WEST}) {
+                    Block arm = base.getRelative(face);
+                    if (arm.getType() == Material.IRON_BLOCK)
+                        blocks.add(arm);
                 }
             }
-        }.runTaskAsynchronously(Citadel.getInstance());
+            base = base.getRelative(BlockFace.UP);
+            blocks.add(base);
+        }
+        return blocks;
     }
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
@@ -225,7 +219,7 @@ public class EntityListener implements Listener {
     public void spawn(CreatureSpawnEvent cse) {
         EntityType type = cse.getEntityType();
         if (type != EntityType.IRON_GOLEM && type != EntityType.SNOW_GOLEM && type != EntityType.WITHER
-            && type != EntityType.SILVERFISH) {
+            && type != EntityType.SILVERFISH && type != EntityType.COPPER_GOLEM) {
             return;
         }
         for (Block block : getGolemBlocks(type, cse.getLocation().getBlock())) {
@@ -233,6 +227,14 @@ public class EntityListener implements Listener {
             if (reinforcement != null) {
                 cse.setCancelled(true);
             }
+        }
+    }
+
+    @EventHandler(priority = EventPriority.LOW)
+    public void blockCopperGolem(ItemTransportingEntityValidateTargetEvent itevte) {
+        Reinforcement rein = ReinforcementLogic.getReinforcementProtecting(itevte.getBlock());
+        if (rein != null && !rein.isInsecure()) {
+            itevte.setAllowed(false);
         }
     }
 

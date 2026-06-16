@@ -1,9 +1,22 @@
 package com.github.devotedmc.hiddenore.listeners;
 
+import com.github.devotedmc.hiddenore.BlockConfig;
+import com.github.devotedmc.hiddenore.Config;
+import com.github.devotedmc.hiddenore.DropConfig;
+import com.github.devotedmc.hiddenore.HiddenOre;
+import com.github.devotedmc.hiddenore.ToolConfig;
+import com.github.devotedmc.hiddenore.VeinConfig;
+import com.github.devotedmc.hiddenore.events.HiddenOreEvent;
+import com.github.devotedmc.hiddenore.events.HiddenOreGenerateEvent;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
+import java.util.UUID;
+import java.util.logging.Level;
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
-import org.bukkit.ChatColor;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.BlockData;
@@ -19,21 +32,6 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.Vector;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
-import java.util.UUID;
-import java.util.logging.Level;
-
-import com.github.devotedmc.hiddenore.BlockConfig;
-import com.github.devotedmc.hiddenore.DropConfig;
-import com.github.devotedmc.hiddenore.HiddenOre;
-import com.github.devotedmc.hiddenore.Config;
-import com.github.devotedmc.hiddenore.ToolConfig;
-import com.github.devotedmc.hiddenore.VeinConfig;
-import com.github.devotedmc.hiddenore.events.HiddenOreEvent;
-import com.github.devotedmc.hiddenore.events.HiddenOreGenerateEvent;
 
 /**
  * Heart of ore generation, handles breaks.
@@ -63,8 +61,6 @@ public class BlockBreakListener implements Listener {
     }
 
     public static void spoofBlockBreak(Location playerLoc, Block block, ItemStack inHand) {
-        throw new UnsupportedOperationException("FakePlayer has been deleted because it's too much of a hassle." +
-            "Re-add it and uncomment the code in this function to get ore dusting.");
 //        HiddenOre.getPlugin().getBreakListener().doBlockBreak(
 //            new BlockBreakEvent(block, new FakePlayer(playerLoc, inHand))
 //        );

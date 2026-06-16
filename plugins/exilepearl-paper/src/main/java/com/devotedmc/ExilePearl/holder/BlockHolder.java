@@ -8,6 +8,7 @@ import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Nameable;
+import org.bukkit.Tag;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
 import org.bukkit.block.Container;
@@ -79,7 +80,6 @@ public class BlockHolder implements PearlHolder {
 
         // In the container inventory?
         List<ItemStack> potentialPearls = new ArrayList<>();
-        potentialPearls.addAll(inv.all(Material.PLAYER_HEAD).values());
         potentialPearls.addAll(inv.all(Material.ENDER_PEARL).values());
         for (ItemStack item : potentialPearls) {
             if (pearl.validateItemStack(item)) {
@@ -89,7 +89,7 @@ public class BlockHolder implements PearlHolder {
 
         //double chests sometimes don't load their inventories properly if the chunk has just been loaded.
         //To fix this, we have to manually check for the other chest half adjacent to this one
-        if (block.getType() == Material.CHEST || block.getType() == Material.TRAPPED_CHEST) {
+        if (block.getType() == Material.CHEST || block.getType() == Material.TRAPPED_CHEST || Tag.COPPER_CHESTS.isTagged(block.getType())) {
             for (Block relative : WorldUtils.getPlanarBlockSides(block, true)) {
                 if (relative.getType() != block.getType()) {
                     continue;
@@ -101,7 +101,6 @@ public class BlockHolder implements PearlHolder {
                 Inventory relInv = ((InventoryHolder) relState).getInventory();
 
                 potentialPearls = new ArrayList<>();
-                potentialPearls.addAll(relInv.all(Material.PLAYER_HEAD).values());
                 potentialPearls.addAll(relInv.all(Material.ENDER_PEARL).values());
                 for (ItemStack item : potentialPearls) {
                     if (pearl.validateItemStack(item)) {

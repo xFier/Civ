@@ -3,22 +3,23 @@ package com.github.maxopoly.finale.listeners;
 import com.destroystokyo.paper.event.entity.ProjectileCollideEvent;
 import com.github.maxopoly.finale.Finale;
 import com.github.maxopoly.finale.combat.event.CritHitEvent;
+import com.github.maxopoly.finale.misc.DamageModificationConfig;
 import com.github.maxopoly.finale.misc.ally.AllyHandler;
 import com.github.maxopoly.finale.misc.arrow.ArrowHandler;
-import com.github.maxopoly.finale.misc.DamageModificationConfig;
-
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
-import java.util.TreeSet;
-
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.enchantments.Enchantment;
-import org.bukkit.entity.*;
+import org.bukkit.entity.Arrow;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.EntityType;
+import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.Player;
+import org.bukkit.entity.Trident;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -34,9 +35,8 @@ import org.bukkit.potion.PotionEffectType;
 
 public class DamageListener implements Listener {
 
-    private static final List<Material> ladderBlocks = Arrays.asList(new Material[]{Material.LADDER, Material.VINE});
-    private static Set<Material> swords = new TreeSet<Material>(Arrays.asList(new Material[]{Material.WOODEN_SWORD,
-        Material.STONE_SWORD, Material.IRON_SWORD, Material.GOLDEN_SWORD, Material.DIAMOND_SWORD, Material.NETHERITE_SWORD}));
+    private static Set<Material> swords = Set.of(Material.WOODEN_SWORD,
+        Material.STONE_SWORD, Material.IRON_SWORD, Material.GOLDEN_SWORD, Material.DIAMOND_SWORD, Material.NETHERITE_SWORD);
 
     public static final String powerMetaDataKey = "shooterPowerLevel";
     public static final String impaleMetaDataKey = "shooterImpaleLevel";
@@ -66,6 +66,9 @@ public class DamageListener implements Listener {
             }
             if (e.getDamager().getType() == EntityType.TRIDENT) {
                 handleTrident(e);
+            }
+            if (e.getDamager().getType() == EntityType.TNT_MINECART) {
+                handleMinecart(e);
             }
             if (e.getDamager().getType() == EntityType.FIREWORK_ROCKET) {
                 DamageModificationConfig fireworkModifier = modifiers.get(DamageModificationConfig.Type.FIREWORK);
@@ -125,6 +128,13 @@ public class DamageListener implements Listener {
         double damage = impaleModifier.modify(e.getDamage(), impaleLevel);
 
         e.setDamage(damage);
+    }
+
+    private void handleMinecart(EntityDamageByEntityEvent e) {
+        DamageModificationConfig modifier = modifiers.get(DamageModificationConfig.Type.CART);
+        if (modifier != null) {
+            e.setDamage(modifier.modify(e.getDamage()));
+        }
     }
 
     private void handleArrow(EntityDamageByEntityEvent e) {

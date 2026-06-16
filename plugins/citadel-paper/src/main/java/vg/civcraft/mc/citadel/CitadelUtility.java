@@ -17,7 +17,7 @@ import vg.civcraft.mc.citadel.model.AcidManager;
 import vg.civcraft.mc.citadel.model.Reinforcement;
 import vg.civcraft.mc.citadel.reinforcementtypes.ReinforcementType;
 import vg.civcraft.mc.civmodcore.inventory.items.ItemMap;
-import vg.civcraft.mc.namelayer.NameAPI;
+import vg.civcraft.mc.namelayer.NameLayerAPI;
 import vg.civcraft.mc.namelayer.group.Group;
 
 /**
@@ -128,12 +128,6 @@ public class CitadelUtility {
         return component;
     }
 
-    public static void debugLog(String msg) {
-        if (Citadel.getInstance().getConfigManager().isDebugEnabled()) {
-            Citadel.getInstance().getLogger().info(msg);
-        }
-    }
-
     public static boolean consumeReinforcementItems(Player player, ReinforcementType type, boolean consumeExtra) {
         ItemMap toRemove = new ItemMap(type.getItem());
         if (consumeExtra) {
@@ -148,18 +142,18 @@ public class CitadelUtility {
         return true;
     }
 
-    public static boolean attemptReinforcementCreation(Block block, ReinforcementType type, Group group,
+    public static boolean attemptReinforcementCreation(Block block, ReinforcementType type, Group group, String groupName,
                                                        Player player) {
         // check if group still exists
-        if (!group.isValid()) {
+        if (group == null || !group.isValid()) {
             CitadelUtility.sendAndLog(player, ChatColor.RED,
-                "The group " + group.getName() + " seems to have been deleted in the mean time",
+                "The group " + groupName + " seems to have been deleted in the mean time",
                 block.getLocation());
             Citadel.getInstance().getStateManager().setState(player, null);
             return true;
         }
         // check if player still has permission
-        if (!NameAPI.getGroupManager().hasAccess(group, player.getUniqueId(),
+        if (!NameLayerAPI.getGroupManager().hasAccess(group, player.getUniqueId(),
             CitadelPermissionHandler.getReinforce())) {
             CitadelUtility.sendAndLog(player, ChatColor.RED,
                 "You seem to have lost permission to reinforce on " + group.getName(),

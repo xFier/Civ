@@ -13,7 +13,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.entity.Player;
 import vg.civcraft.mc.namelayer.GroupManager.PlayerType;
-import vg.civcraft.mc.namelayer.NameAPI;
+import vg.civcraft.mc.namelayer.NameLayerAPI;
 import vg.civcraft.mc.namelayer.command.BaseCommandMiddle;
 import vg.civcraft.mc.namelayer.group.Group;
 import vg.civcraft.mc.namelayer.permission.PermissionType;
@@ -28,7 +28,7 @@ public class DeleteGroup extends BaseCommandMiddle {
     @CommandCompletion("@NL_Groups")
     public void execute(Player sender, String groupName) {
         Player p = (Player) sender;
-        UUID uuid = NameAPI.getUUID(p.getName());
+        UUID uuid = NameLayerAPI.getUUID(p.getName());
         String x = groupName;
         String confirm = "CONFIRM DELETION";
         if (x.toLowerCase().contains(confirm.toLowerCase())) {
@@ -41,20 +41,21 @@ public class DeleteGroup extends BaseCommandMiddle {
                 if (x.equalsIgnoreCase("%s %s".formatted(confirm, gD.getName()))) {
 
                     //player could have lost delete permission in the mean time
-                    if (!NameAPI.getGroupManager().hasAccess(gD, uuid, PermissionType.getPermission("DELETE"))) {
+                    if (!NameLayerAPI.getGroupManager().hasAccess(gD, uuid, PermissionType.getPermission("DELETE"))) {
                         p.sendMessage(Component.text("You do not have permission to run that command.").color(NamedTextColor.RED));
                         return;
                     }
                     Date now = new Date(System.currentTimeMillis() - 15000);
                     //if it has been less than 15 seconds
                     if (now.getTime() < Long.parseLong(entry[1])) {
-                        //good to go delete the group
-                        if (gm.deleteGroup(gD.getName()))
-                            p.sendMessage(Component.text("Group was successfully deleted.").color(NamedTextColor.GREEN));
-                        else
-                            p.sendMessage(Component.text("Group is now disciplined. Check back later to see if group is deleted.").color(NamedTextColor.GREEN));
-
                         confirmDeleteGroup.remove(uuid);
+                        gm.deleteGroupAsync(uuid, gD, false, result -> {
+                            if (result.success()) {
+                                p.sendMessage(Component.text("Group was successfully deleted.").color(NamedTextColor.GREEN));
+                            } else {
+                                p.sendMessage(Component.text(result.message()).color(NamedTextColor.RED));
+                            }
+                        });
                         return;
                     } else {
                         p.sendMessage(Component.text("You did not do '/nldg %s %s' fast enough, you will need to start over".formatted(confirm, gD.getName())).color(NamedTextColor.RED));
@@ -70,7 +71,7 @@ public class DeleteGroup extends BaseCommandMiddle {
         if (groupIsNull(sender, x, g)) {
             return;
         }
-        if (!NameAPI.getGroupManager().hasAccess(g, uuid, PermissionType.getPermission("DELETE"))) {
+        if (!NameLayerAPI.getGroupManager().hasAccess(g, uuid, PermissionType.getPermission("DELETE"))) {
             p.sendMessage(Component.text("You do not have permission to run that command.").color(NamedTextColor.RED));
             return;
         }
@@ -80,7 +81,7 @@ public class DeleteGroup extends BaseCommandMiddle {
             return;
         }
         if (g.isDisciplined() && !p.hasPermission("namelayer.admin")) {
-            p.sendMessage(Component.text("Group is disiplined.").color(NamedTextColor.RED));
+            p.sendMessage(Component.text("Group is disciplined.").color(NamedTextColor.RED));
             return;
         }
         //set that user can confirm group in 15 seconds

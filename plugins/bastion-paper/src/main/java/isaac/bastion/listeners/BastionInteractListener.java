@@ -32,7 +32,7 @@ import org.bukkit.scheduler.BukkitRunnable;
 import vg.civcraft.mc.citadel.Citadel;
 import vg.civcraft.mc.citadel.events.ReinforcementCreationEvent;
 import vg.civcraft.mc.citadel.model.Reinforcement;
-import vg.civcraft.mc.namelayer.NameAPI;
+import vg.civcraft.mc.namelayer.NameLayerAPI;
 import vg.civcraft.mc.namelayer.permission.PermissionType;
 
 public class BastionInteractListener implements Listener {
@@ -61,10 +61,12 @@ public class BastionInteractListener implements Listener {
             blocks.add(event.getClickedBlock());
             Set<BastionBlock> blocking = blockManager.getBlockingBastionsWithoutPermission(event.getClickedBlock().getLocation(),
                 event.getPlayer().getUniqueId(), PermissionType.getPermission(Permissions.BASTION_PLACE));
-            if (!blocking.isEmpty()) {
-                event.setCancelled(true);
-                player.sendMessage(ChatColor.RED + "Boat blocked by bastion");
-                return;
+            for (BastionBlock b : blocking) {
+                if (!b.getType().isOnlyDirectDestruction()) {
+                    event.setCancelled(true);
+                    player.sendMessage(ChatColor.RED + "Boat blocked by bastion");
+                    return;
+                }
             }
         }
 
@@ -83,19 +85,6 @@ public class BastionInteractListener implements Listener {
             TextComponent toSend = blockManager.infoMessageComponent(dev, block.getRelative(event.getBlockFace()), block, player);
 
             player.spigot().sendMessage(toSend);
-        } else if (PlayersStates.playerInMode(player, Mode.DELETE)) {
-            BastionBlock bastionBlock = blockStorage.getBastionBlock(block.getLocation());
-
-            if (bastionBlock == null) {
-                return;
-            }
-
-            if (bastionBlock.canRemove(player)) {
-                TextComponent toSend = blockManager.bastionDeletedMessageComponent(bastionBlock);
-                bastionBlock.destroy();
-                player.spigot().sendMessage(toSend);
-                event.setCancelled(true);
-            }
         } else if (PlayersStates.playerInMode(player, Mode.MATURE)) {
             BastionBlock bastionBlock = blockStorage.getBastionBlock(block.getLocation());
 
@@ -109,7 +98,7 @@ public class BastionInteractListener implements Listener {
             if (type == null) return; //if it wasnt stored it cant have been a bastion
             Reinforcement reinforcement = Citadel.getInstance().getReinforcementManager().getReinforcement(block.getLocation());
 
-            if (NameAPI.getGroupManager().hasAccess(reinforcement.getGroup(), player.getUniqueId(), PermissionType.getPermission(Permissions.BASTION_PLACE))) {
+            if (NameLayerAPI.getGroupManager().hasAccess(reinforcement.getGroup(), player.getUniqueId(), PermissionType.getPermission(Permissions.BASTION_PLACE))) {
                 final Location loc = block.getLocation().clone();
                 new BukkitRunnable() {
                     @Override
@@ -152,7 +141,7 @@ public class BastionInteractListener implements Listener {
             // Check Permissions.BASTION_PLACE; Citadel handles the canBypass() check...
             Reinforcement reinforcement = event.getReinforcement();
             final Player player = event.getPlayer();
-            if (!NameAPI.getGroupManager().hasAccess(reinforcement.getGroup(), player.getUniqueId(), PermissionType.getPermission(Permissions.BASTION_PLACE))) {
+            if (!NameLayerAPI.getGroupManager().hasAccess(reinforcement.getGroup(), player.getUniqueId(), PermissionType.getPermission(Permissions.BASTION_PLACE))) {
                 event.setCancelled(true);
                 event.getPlayer().sendMessage(ChatColor.RED + "You lack permission to create a Bastion on this group");
                 return;

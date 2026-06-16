@@ -10,10 +10,9 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import vg.civcraft.mc.namelayer.GroupManager;
 import vg.civcraft.mc.namelayer.GroupManager.PlayerType;
-import vg.civcraft.mc.namelayer.NameAPI;
+import vg.civcraft.mc.namelayer.NameLayerAPI;
 import vg.civcraft.mc.namelayer.command.BaseCommandMiddle;
 import vg.civcraft.mc.namelayer.group.Group;
-import vg.civcraft.mc.namelayer.listeners.PlayerListener;
 import vg.civcraft.mc.namelayer.permission.PermissionType;
 
 public class RevokeInvite extends BaseCommandMiddle {
@@ -33,11 +32,11 @@ public class RevokeInvite extends BaseCommandMiddle {
             return;
         }
         if (group.isDisciplined()) {
-            p.sendMessage(ChatColor.RED + "This group is disiplined.");
+            p.sendMessage(ChatColor.RED + "This group is disciplined.");
             return;
         }
-        UUID executor = NameAPI.getUUID(p.getName());
-        UUID uuid = NameAPI.getUUID(targetPlayer);
+        UUID executor = NameLayerAPI.getUUID(p.getName());
+        UUID uuid = NameLayerAPI.getUUID(targetPlayer);
 
         if (uuid == null) {
             p.sendMessage(ChatColor.RED + "The player has never played before.");
@@ -53,13 +52,13 @@ public class RevokeInvite extends BaseCommandMiddle {
         //get invitee PlayerType
         PlayerType pType = group.getInvite(uuid);
         if (pType == null) {
-            p.sendMessage(ChatColor.RED + NameAPI.getCurrentName(uuid) + " does not have an invite to that group.");
+            p.sendMessage(ChatColor.RED + NameLayerAPI.getCurrentName(uuid) + " does not have an invite to that group.");
             return;
         }
 
         //check invitee has invite
         if (group.isMember(uuid)) {
-            p.sendMessage(ChatColor.RED + NameAPI.getCurrentName(uuid) + " is already part of that group, "
+            p.sendMessage(ChatColor.RED + NameLayerAPI.getCurrentName(uuid) + " is already part of that group, "
                 + "use /remove to remove them.");
             return;
         }
@@ -76,9 +75,12 @@ public class RevokeInvite extends BaseCommandMiddle {
             return;
         }
 
-        group.removeInvite(uuid, true);
-        PlayerListener.removeNotification(uuid, group);
-
-        p.sendMessage(ChatColor.GREEN + NameAPI.getCurrentName(uuid) + "'s invitation has been revoked.");
+        group.removeInviteAsync(p.getUniqueId(), uuid, p.hasPermission("namelayer.admin"), result -> {
+            if (result.success()) {
+                p.sendMessage(ChatColor.GREEN + NameLayerAPI.getCurrentName(uuid) + "'s invitation has been revoked.");
+            } else {
+                p.sendMessage(ChatColor.RED + result.message());
+            }
+        });
     }
 }

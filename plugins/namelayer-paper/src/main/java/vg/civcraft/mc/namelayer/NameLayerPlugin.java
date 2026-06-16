@@ -1,41 +1,58 @@
 package vg.civcraft.mc.namelayer;
 
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
+import javax.sql.DataSource;
 import org.bukkit.Bukkit;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.scheduler.BukkitTask;
 import vg.civcraft.mc.civmodcore.ACivMod;
 import vg.civcraft.mc.civmodcore.dao.DatabaseCredentials;
 import vg.civcraft.mc.civmodcore.dao.ManagedDatasource;
+import vg.civcraft.mc.namelayer.cache.NameLayerGroupCache;
 import vg.civcraft.mc.namelayer.command.CommandHandler;
-import vg.civcraft.mc.namelayer.database.AssociationList;
-import vg.civcraft.mc.namelayer.database.GroupManagerDao;
+import vg.civcraft.mc.namelayer.database.NameLayerReadDao;
 import vg.civcraft.mc.namelayer.group.AutoAcceptHandler;
 import vg.civcraft.mc.namelayer.group.BlackList;
 import vg.civcraft.mc.namelayer.group.DefaultGroupHandler;
-import vg.civcraft.mc.namelayer.listeners.AssociationListener;
 import vg.civcraft.mc.namelayer.listeners.PlayerListener;
 import vg.civcraft.mc.namelayer.misc.ClassHandler;
-import vg.civcraft.mc.namelayer.misc.NameCleanser;
 import vg.civcraft.mc.namelayer.permission.PermissionType;
+import vg.civcraft.mc.namelayer.rabbitmq.NameLayerInvalidationConsumer;
+import vg.civcraft.mc.namelayer.rabbitmq.NameLayerRabbitMqConfig;
+import vg.civcraft.mc.namelayer.rabbitmq.NameLayerWriteClient;
 
 public class NameLayerPlugin extends ACivMod {
 
-    private static AssociationList associations;
     private static BlackList blackList;
-    private static GroupManagerDao groupManagerDao;
+    private static NameLayerReadDao nameLayerReadDao;
     private static DefaultGroupHandler defaultGroupHandler;
     private static NameLayerPlugin instance;
     private static AutoAcceptHandler autoAcceptHandler;
+    private static volatile NameLayerGroupCache groupCache;
     private CommandHandler handle;
     private static ManagedDatasource db;
     private static boolean loadGroups = true;
     private static int groupLimit = 10;
     private static boolean createGroupOnFirstJoin;
     private FileConfiguration config;
+    private NameLayerInvalidationConsumer invalidationConsumer;
+    private NameLayerWriteClient writeClient;
+    private BukkitTask freshnessCheckTask;
+    private long stateLocalVersion;
+    private long staleVersionDetectedAtMillis;
+    private final AtomicLong fullResyncCount = new AtomicLong();
+    private final AtomicLong targetedReloadCount = new AtomicLong();
+    private final AtomicLong targetedReloadFailureCount = new AtomicLong();
+    private final AtomicLong rabbitMqReconnectCount = new AtomicLong();
 
     @Override
     public void onEnable() {
@@ -49,38 +66,121 @@ public class NameLayerPlugin extends ACivMod {
         instance = this;
         loadDatabases();
         ClassHandler.Initialize(Bukkit.getServer());
-        new NameAPI(new GroupManager(), associations);
-        NameCleanser.load(config.getConfigurationSection("name_cleanser"));
-        MojangNames.init(this);
-        registerListeners();
+
+        NameLayerAPI.init(new GroupManager(), getNameApiDataSource());
+        getServer().getPluginManager().registerEvents(new NameLayerAPI(), this);
+
+        registerListener(new PlayerListener());
+
         if (loadGroups) {
             PermissionType.initialize();
             blackList = new BlackList();
+            groupCache = new NameLayerGroupCache();
+            Bukkit.getScheduler().runTask(this, () -> {
+                Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+                    groupCache = NameLayerGroupCache.loadAll(nameLayerReadDao, getLogger());
+                });
+            });
+            startInvalidationConsumer();
             if (config.getBoolean("groups.interact", true)) {
-                groupManagerDao.loadGroupsInvitations();
                 defaultGroupHandler = new DefaultGroupHandler();
-                autoAcceptHandler = new AutoAcceptHandler(groupManagerDao.loadAllAutoAccept());
+                autoAcceptHandler = new AutoAcceptHandler(nameLayerReadDao.loadAllAutoAccept());
                 handle = new CommandHandler(this);
             }
         }
     }
 
-    public void registerListeners() {
-        registerListener(new AssociationListener());
-        registerListener(new PlayerListener());
-    }
-
     @Override
     public void onDisable() {
-        MojangNames.reset(this);
+        if (invalidationConsumer != null) {
+            invalidationConsumer.close();
+        }
+        if (writeClient != null) {
+            writeClient.close();
+        }
+        if (freshnessCheckTask != null) {
+            freshnessCheckTask.cancel();
+        }
         super.onDisable();
+    }
+
+    private void startInvalidationConsumer() {
+        final NameLayerRabbitMqConfig rabbitMqConfig;
+        try {
+            rabbitMqConfig = NameLayerRabbitMqConfig.from(config.getConfigurationSection("rabbitmq"));
+        } catch (final IllegalArgumentException exception) {
+            getLogger().log(Level.SEVERE, "Invalid NameLayer RabbitMQ configuration", exception);
+            return;
+        }
+        if (!rabbitMqConfig.enabled()) {
+            getLogger().log(Level.INFO, "NameLayer RabbitMQ invalidation consumer is disabled");
+            return;
+        }
+        invalidationConsumer = new NameLayerInvalidationConsumer(
+            rabbitMqConfig.connectionFactory(),
+            rabbitMqConfig.serverId(),
+            getLogger(),
+            config.getString("sql.dbname", "namelayer"),
+            this
+        );
+        if (!invalidationConsumer.start()) {
+            getLogger().log(Level.SEVERE, "NameLayer RabbitMQ invalidation consumer failed to connect");
+        }
+        writeClient = new NameLayerWriteClient(
+            rabbitMqConfig.connectionFactory(),
+            getLogger(),
+            this
+        );
+        if (!writeClient.connect()) {
+            getLogger().log(Level.SEVERE, "NameLayer RabbitMQ write client failed to connect");
+        }
+        startFreshnessCheck(rabbitMqConfig);
+    }
+
+    private void startFreshnessCheck(final NameLayerRabbitMqConfig rabbitMqConfig) {
+        if (!rabbitMqConfig.freshnessCheckEnabled()) {
+            return;
+        }
+        final long intervalTicks = Math.max(20L, rabbitMqConfig.freshnessCheckIntervalSeconds() * 20L);
+        final long jitterTicks = Math.max(0L, rabbitMqConfig.freshnessCheckJitterSeconds() * 20L);
+        final long staleGraceMillis = Math.max(0L, rabbitMqConfig.freshnessCheckStaleGraceSeconds() * 1000L);
+        final long initialDelay = intervalTicks + (jitterTicks == 0L ? 0L : ThreadLocalRandom.current().nextLong(jitterTicks + 1L));
+        freshnessCheckTask = getServer().getScheduler().runTaskTimerAsynchronously(this, () -> {
+            final NameLayerGroupCache activeCache = groupCache;
+            if (activeCache == null) {
+                return;
+            }
+            final long localVersion = activeCache.getAppliedVersion();
+            final long databaseVersion = nameLayerReadDao.loadCacheVersion();
+            if (databaseVersion <= localVersion) {
+                if (localVersion > databaseVersion) {
+                    getLogger().log(Level.WARNING, "Applied version is in the future? Constraint localVersion <= databaseVersion violated");
+                }
+                stateLocalVersion = 0L;
+                staleVersionDetectedAtMillis = 0L;
+                return;
+            }
+            if (stateLocalVersion != localVersion || staleVersionDetectedAtMillis == 0L) {
+                stateLocalVersion = localVersion;
+                staleVersionDetectedAtMillis = System.currentTimeMillis();
+                return;
+            }
+            final long staleMillis = System.currentTimeMillis() - staleVersionDetectedAtMillis;
+            if (staleMillis < staleGraceMillis) {
+                return;
+            }
+            getLogger().log(Level.WARNING, "NameLayer cache version stayed stale for " + staleMillis + "ms; full-resyncing");
+            fullResyncGroupCache();
+            stateLocalVersion = 0L;
+            staleVersionDetectedAtMillis = 0L;
+        }, initialDelay, intervalTicks);
     }
 
     public static NameLayerPlugin getInstance() {
         return instance;
     }
 
-    public void loadDatabases() {
+    private void loadDatabases() {
         String host = config.getString("sql.hostname", "localhost");
         int port = config.getInt("sql.port", 3306);
         String dbname = config.getString("sql.dbname", "namelayer");
@@ -102,7 +202,7 @@ public class NameLayerPlugin extends ACivMod {
         }
 
         if (!db.isManaged()) {
-            // First "migration" is conversion from old system to new, and lives outside AssociationList and GroupManagerDao.
+            // First "migration" is conversion from old system to new, and lives outside AssociationList.
             boolean isNew = true;
             try (Connection connection = db.getConnection();
                  PreparedStatement checkNewInstall = connection.prepareStatement("SELECT * FROM db_version LIMIT 1;");
@@ -142,60 +242,94 @@ public class NameLayerPlugin extends ACivMod {
         }
 
 
-        associations = new AssociationList(getLogger(), db);
-        associations.registerMigrations();
-
         if (loadGroups) {
-            groupManagerDao = new GroupManagerDao(getLogger(), db);
-            groupManagerDao.registerMigrations();
-            NameLayerPlugin.log(Level.INFO, "Removing any cycles...");
-            groupManagerDao.removeCycles();
+            nameLayerReadDao = new NameLayerReadDao(getLogger(), db);
         }
-
-        long begin_time = System.currentTimeMillis();
-
-        try {
-            getLogger().log(Level.INFO, "Update prepared, starting database update.");
-            if (!db.updateDatabase()) {
-                getLogger().log(Level.SEVERE, "Update failed, terminating Bukkit.");
-                Bukkit.shutdown();
-            }
-        } catch (Exception e) {
-            getLogger().log(Level.SEVERE, "Update failed, terminating Bukkit. Cause:", e);
-            Bukkit.shutdown();
-        }
-
-        getLogger()
-            .log(Level.INFO, "Database update took {0} seconds", (System.currentTimeMillis() - begin_time) / 1000);
-
     }
 
-    /**
-     * @return Returns the AssocationList.
-     */
-    public static AssociationList getAssociationList() {
-        return associations;
+    private DataSource getNameApiDataSource() {
+        ConfigurationSection section = config.getConfigurationSection("nameapi.database");
+
+        try {
+            Class.forName("org.mariadb.jdbc.Driver");
+        } catch (ClassNotFoundException e) {
+            throw new RuntimeException(e);
+        }
+
+        HikariConfig dbConfig = new HikariConfig();
+        dbConfig.setJdbcUrl("jdbc:" + section.getString("driver", "mariadb") + "://" + section.getString("host", "localhost") + ":" +
+            section.getInt("port", 3306) + "/" + section.getString("database", "minecraft"));
+        dbConfig.setConnectionTimeout(section.getInt("connection_timeout", 10_000));
+        dbConfig.setIdleTimeout(section.getInt("idle_timeout", 600_000));
+        dbConfig.setMaxLifetime(section.getInt("max_lifetime", 7_200_000));
+        dbConfig.setMaximumPoolSize(section.getInt("poolsize", 1));
+        dbConfig.setUsername(section.getString("user", "root"));
+        String password = section.getString("password");
+        if (password != null && !password.isBlank()) {
+            dbConfig.setPassword(password);
+        }
+        return new HikariDataSource(dbConfig);
     }
 
     /**
      * @return Returns the GroupManagerDatabase.
      */
-    public static GroupManagerDao getGroupManagerDao() {
-        return groupManagerDao;
+    public static NameLayerReadDao getNameLayerReadDao() {
+        return nameLayerReadDao;
+    }
+
+    public static NameLayerGroupCache getGroupCache() {
+        return groupCache;
+    }
+
+    public static NameLayerWriteClient getWriteClient() {
+        return instance == null ? null : instance.writeClient;
+    }
+
+    public static void fullResyncGroupCache() {
+        final long startedAtMillis = System.currentTimeMillis();
+        groupCache = NameLayerGroupCache.loadAll(nameLayerReadDao, getInstance().getLogger());
+        if (defaultGroupHandler != null) {
+            defaultGroupHandler.reloadAll();
+        }
+        if (autoAcceptHandler != null) {
+            autoAcceptHandler.reloadAll(nameLayerReadDao.loadAllAutoAccept());
+        }
+        final long count = instance.fullResyncCount.incrementAndGet();
+        getInstance().getLogger().log(
+            Level.INFO,
+            "NameLayer full resync completed in " + (System.currentTimeMillis() - startedAtMillis) + "ms; count=" + count
+        );
+    }
+
+    public static void recordTargetedReload(final int groupCount, final long elapsedMillis) {
+        final long count = instance.targetedReloadCount.incrementAndGet();
+        getInstance().getLogger().log(
+            Level.INFO,
+            "NameLayer targeted reload completed for " + groupCount + " groups in " + elapsedMillis + "ms; count=" + count
+        );
+    }
+
+    public static void recordTargetedReloadFailure(final int groupCount) {
+        final long count = instance.targetedReloadFailureCount.incrementAndGet();
+        getInstance().getLogger().log(
+            Level.WARNING,
+            "NameLayer targeted reload failed for " + groupCount + " groups; failures=" + count
+        );
+    }
+
+    public static void recordRabbitMqReconnect() {
+        final long count = instance.rabbitMqReconnectCount.incrementAndGet();
+        getInstance().getLogger().log(Level.WARNING, "NameLayer RabbitMQ reconnect scheduled; count=" + count);
     }
 
     public static void log(Level level, String message) {
         if (level == Level.INFO) {
-            Bukkit.getLogger().log(level, "[NameLayer:] Info follows\n" +
-                message);
+            NameLayerPlugin.getInstance().getSLF4JLogger().info(message);
         } else if (level == Level.WARNING) {
-            Bukkit.getLogger().log(level, "[NameLayer:] Warning follows\n" +
-                message);
+            NameLayerPlugin.getInstance().getSLF4JLogger().warn(message);
         } else if (level == Level.SEVERE) {
-            Bukkit.getLogger()
-                .log(level, "[NameLayer:] Stack Trace follows\n --------------------------------------\n" +
-                    message +
-                    "\n --------------------------------------");
+            NameLayerPlugin.getInstance().getSLF4JLogger().error(message);
         }
     }
 

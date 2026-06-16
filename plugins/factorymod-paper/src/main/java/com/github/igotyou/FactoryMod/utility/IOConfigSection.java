@@ -12,6 +12,7 @@ import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
+import org.bukkit.Tag;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.entity.Player;
@@ -64,12 +65,12 @@ public class IOConfigSection extends StaticDisplaySection {
 
     private Clickable getIoClickable(Material adjacentType, Direction dir, String dirLabel) {
         IOSelector.IOState dirState = ioSelector.getState(dir);
-        boolean chestMissing = adjacentType != Material.CHEST && adjacentType != Material.TRAPPED_CHEST;
+        boolean chestMissing = adjacentType != Material.CHEST && adjacentType != Material.TRAPPED_CHEST && adjacentType != Material.BARREL && !Tag.COPPER_CHESTS.isTagged(adjacentType);
         ItemStack display;
         if (chestMissing) {
             display = new ItemStack(Material.BARRIER);
             ItemUtils.addComponentLore(display, Component
-                .text("<no chest>")
+                .text("<no chest/barrel>")
                 .style(Style.style(TextDecoration.BOLD))
                 .color(TextColor.color(255, 0, 0)));
         } else {

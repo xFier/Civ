@@ -1,6 +1,5 @@
 package com.github.maxopoly.finale;
 
-import com.comphenix.protocol.ProtocolLibrary;
 import com.github.maxopoly.finale.command.AllyCommand;
 import com.github.maxopoly.finale.command.CardinalCommand;
 import com.github.maxopoly.finale.command.CombatConfigCommand;
@@ -16,17 +15,20 @@ import com.github.maxopoly.finale.listeners.DamageListener;
 import com.github.maxopoly.finale.listeners.EnchantmentDisableListener;
 import com.github.maxopoly.finale.listeners.FinaleListener;
 import com.github.maxopoly.finale.listeners.GappleListener;
+import com.github.maxopoly.finale.listeners.MaceListener;
 import com.github.maxopoly.finale.listeners.MeteoricIronSlownessListener;
 import com.github.maxopoly.finale.listeners.NetheriteFireResistanceListener;
 import com.github.maxopoly.finale.listeners.PearlCoolDownListener;
 import com.github.maxopoly.finale.listeners.PlayerListener;
 import com.github.maxopoly.finale.listeners.PotionListener;
+import com.github.maxopoly.finale.listeners.RebalanceTntMinecartListener;
 import com.github.maxopoly.finale.listeners.ShieldListener;
 import com.github.maxopoly.finale.listeners.ToolProtectionListener;
 import com.github.maxopoly.finale.listeners.TridentListener;
 import com.github.maxopoly.finale.listeners.VelocityFixListener;
 import com.github.maxopoly.finale.listeners.WarpFruitListener;
 import com.github.maxopoly.finale.listeners.WeaponModificationListener;
+import com.github.maxopoly.finale.mob.BleezeAI;
 import com.github.maxopoly.finale.overlay.ScoreboardHUD;
 import org.bukkit.Bukkit;
 import org.bukkit.event.HandlerList;
@@ -51,6 +53,8 @@ public class Finale extends ACivMod {
 
     private EnchantmentDisableListener enchantmentDisableListener;
     private WeaponModificationListener weaponModificationListener;
+
+    private PearlCoolDownListener pearlCoolDownListener;
 
     public CombatTagPlusManager getCombatTagPlusManager() {
         return ctpManager;
@@ -78,13 +82,10 @@ public class Finale extends ACivMod {
     @Override
     public void onDisable() {
         if (manager != null) {
-            manager.getAllyHandler().save();
-            manager.getAllyHandler().shutdown();
+            manager.unregister();
         }
 
         HandlerList.unregisterAll(this);
-        ProtocolLibrary.getProtocolManager().removePacketListeners(this);
-        ProtocolLibrary.getProtocolManager().getAsynchronousManager().unregisterAsyncHandlers(this);
         Bukkit.getScheduler().cancelTasks(this);
     }
 
@@ -103,7 +104,7 @@ public class Finale extends ACivMod {
         // are enabled.
         if (config.isPearlEnabled()) {
             Bukkit.getPluginManager()
-                .registerEvents(new PearlCoolDownListener(config.getPearlCoolDown(), config.combatTagOnPearl(),
+                .registerEvents(pearlCoolDownListener = new PearlCoolDownListener(config.getPearlCoolDown(), config.combatTagOnPearl(),
                     ctpManager), this);
         }
         Bukkit.getPluginManager().registerEvents(weaponModificationListener = new WeaponModificationListener(), this);
@@ -120,6 +121,9 @@ public class Finale extends ACivMod {
         if (config.isMeteoricIronSlownessEnabled()) {
             Bukkit.getPluginManager().registerEvents(new MeteoricIronSlownessListener(), this);
         }
+        if (config.isRebalanceTntMinecartEnabled()) {
+            Bukkit.getPluginManager().registerEvents(new RebalanceTntMinecartListener(), this);
+        }
         Bukkit.getPluginManager().registerEvents(new WarpFruitListener(), this);
         Bukkit.getPluginManager().registerEvents(new TridentListener(), this);
         Bukkit.getPluginManager().registerEvents(new ShieldListener(), this);
@@ -128,6 +132,16 @@ public class Finale extends ACivMod {
         }
         Bukkit.getPluginManager().registerEvents(new CrossbowListener(config.isFireworkExplosions()), this);
         Bukkit.getPluginManager().registerEvents(new GappleListener(), this);
+
+        getServer().getPluginManager().registerEvents(new MaceListener(config.getMaceCooldown(), config.getMaceMaxDamage(), config.getWindCooldown()), this);
+
+        if (getServer().getPluginManager().isPluginEnabled("MythicMobs")) {
+            new BleezeAI().start();
+        }
+    }
+
+    public PearlCoolDownListener getPearlCoolDownListener() {
+        return pearlCoolDownListener;
     }
 
     private void registerCommands() {

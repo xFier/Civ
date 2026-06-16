@@ -25,6 +25,7 @@ import isaac.bastion.BastionBlock;
 import isaac.bastion.manager.BastionBlockManager;
 import net.minelink.ctplus.CombatTagPlus;
 import net.minelink.ctplus.compat.base.NpcIdentity;
+import net.minelink.ctplus.task.SafeLogoutTask;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.OfflinePlayer;
@@ -43,7 +44,7 @@ import org.bukkit.plugin.PluginLoader;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import vg.civcraft.mc.namelayer.GroupManager;
-import vg.civcraft.mc.namelayer.NameAPI;
+import vg.civcraft.mc.namelayer.NameLayerAPI;
 import vg.civcraft.mc.namelayer.permission.PermissionType;
 
 import java.io.File;
@@ -435,7 +436,7 @@ final class ExilePearlCore implements ExilePearlApi {
     @Override
     public String getRealPlayerName(UUID uid) {
         if (isNameLayerEnabled()) {
-            return NameAPI.getCurrentName(uid);
+            return NameLayerAPI.getCurrentName(uid);
         }
         OfflinePlayer player = Bukkit.getOfflinePlayer(uid);
         if (player == null) {
@@ -449,7 +450,7 @@ final class ExilePearlCore implements ExilePearlApi {
     @Override
     public UUID getUniqueId(String name) {
         if (isNameLayerEnabled()) {
-            return NameAPI.getUUID(name);
+            return NameLayerAPI.getUUID(name);
         }
         OfflinePlayer offline = Bukkit.getOfflinePlayer(name);
         if (offline != null) {
@@ -504,6 +505,29 @@ final class ExilePearlCore implements ExilePearlApi {
             return combatTag.getTagManager().isTagged(uid);
         }
         return false;
+    }
+
+    @Override
+    public boolean wouldSpawnNpc(Player player) {
+        if (player.isDead()) return false;
+
+        UUID uid = player.getUniqueId();
+        boolean isTagged = combatTag.getTagManager().isTagged(uid);
+        if (!isTagged && !combatTag.getSettings().alwaysSpawn()) return false;
+
+        // Do nothing if player is not within enabled world
+        if (combatTag.getSettings().getDisabledWorlds().contains(player.getWorld().getName())) return false;
+
+        // Do nothing if a player logs off in combat in a WorldGuard protected region
+        if (!combatTag.getHookManager().isPvpEnabledAt(player.getLocation())) return false;
+
+        // Do nothing if player has permission
+        if (player.hasPermission("ctplus.bypass.tag")) return false;
+
+        // Do nothing if player has safely logged out
+        if (SafeLogoutTask.isFinished(player)) return false;
+
+        return true;
     }
 
     @Override
@@ -687,5 +711,10 @@ final class ExilePearlCore implements ExilePearlApi {
     @Override
     public ExilePearl getPrimaryPearl(UUID player) {
         return pearlManager.getPrimaryPearl(player);
+    }
+
+    @Override
+    public @NotNull String namespace() {
+        return plugin.namespace();
     }
 }

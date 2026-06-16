@@ -2,9 +2,13 @@ package net.minelink.ctplus.nms;
 
 import com.google.common.collect.Lists;
 import com.mojang.datafixers.util.Pair;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.util.List;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtIo;
+import net.minecraft.nbt.NbtUtils;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket;
@@ -13,13 +17,17 @@ import net.minecraft.network.protocol.game.ClientboundSetEquipmentPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.players.NameAndId;
+import net.minecraft.util.ProblemReporter;
+import net.minecraft.world.ItemStackWithSlot;
+import net.minecraft.world.entity.EntityEquipment;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeMap;
-import net.minecraft.world.food.FoodData;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.storage.PlayerDataStorage;
+import net.minecraft.world.level.storage.TagValueOutput;
 import net.minelink.ctplus.compat.base.NpcIdentity;
 import net.minelink.ctplus.compat.base.NpcPlayerHelper;
 import org.bukkit.Bukkit;
@@ -27,12 +35,6 @@ import org.bukkit.Location;
 import org.bukkit.craftbukkit.CraftWorld;
 import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.entity.Player;
-
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.lang.reflect.Field;
-import java.util.List;
 
 public class NpcPlayerHelperImpl implements NpcPlayerHelper {
 
@@ -43,7 +45,8 @@ public class NpcPlayerHelperImpl implements NpcPlayerHelper {
         Location l = player.getLocation();
 
         npcPlayer.spawnIn(worldServer);
-        npcPlayer.forceSetPositionRotation(l.getX(), l.getY(), l.getZ(), l.getYaw(), l.getPitch());
+        npcPlayer.snapTo(l.getX(), l.getY(), l.getZ(), l.getYaw(), l.getPitch());
+        npcPlayer.connection.resetPosition();
         npcPlayer.gameMode.setLevel(worldServer);
         npcPlayer.invulnerableTime = 0;
 
@@ -73,7 +76,7 @@ public class NpcPlayerHelperImpl implements NpcPlayerHelper {
             serverPlayer.connection.send(packet);
         }
 
-        ServerLevel worldServer = entity.serverLevel();
+        ServerLevel worldServer = entity.level();
         worldServer.chunkSource.removeEntity(entity);
         worldServer.getPlayers(serverPlayer -> serverPlayer instanceof NpcPlayer).remove(entity);
         removePlayerList(player);
@@ -120,7 +123,7 @@ public class NpcPlayerHelperImpl implements NpcPlayerHelper {
             List<Pair<EquipmentSlot, ItemStack>> list = Lists.newArrayList();
             list.add(Pair.of(slot, item));
             Packet<ClientGamePacketListener> packet = new ClientboundSetEquipmentPacket(entity.getId(), list);
-            entity.serverLevel().chunkSource.broadcast(entity, packet);
+            entity.level().chunkSource.sendToTrackingPlayers(entity, packet);
         }
     }
 
@@ -137,39 +140,30 @@ public class NpcPlayerHelperImpl implements NpcPlayerHelper {
         if (p != null && p.isOnline()) return;
 
         PlayerDataStorage worldStorage = ((CraftWorld) Bukkit.getWorlds().getFirst()).getHandle().getServer().playerDataStorage;
-        CompoundTag playerNbt = worldStorage.load(identity.getName(), identity.getId().toString()).orElse(null);
-
-        // foodTickTimer is now private in 1.8.3 -- still private in 1.12 -- still private in 1.20.6
-        Field foodTickTimerField;
-        int foodTickTimer;
-        try {
-            //Although we can use Mojang mappings when developing, We need to use the obfuscated field name
-            //until we can run a full Mojmapped server. I personally used this site when updating to 1.20.6:
-            // https://mappings.cephx.dev/1.20.6/net/minecraft/world/food/FoodData.html
-            foodTickTimerField = FoodData.class.getDeclaredField("d"); // todo fix
-            foodTickTimerField.setAccessible(true);
-            foodTickTimer = foodTickTimerField.getInt(entity.getFoodData());
-        } catch (NoSuchFieldException | IllegalAccessException e) {
-            throw new RuntimeException(e);
-        }
+        CompoundTag playerNbt = worldStorage.load(new NameAndId(identity.getId(), identity.getName())).orElse(null);
 
         playerNbt.putShort("Air", (short) entity.getAirSupply());
         // Health is now just a float; fractional is not stored separately. (1.12)
         playerNbt.putFloat("Health", entity.getHealth());
         playerNbt.putFloat("AbsorptionAmount", entity.getAbsorptionAmount());
         playerNbt.putInt("XpTotal", entity.experienceLevel);
-        playerNbt.putInt("foodLevel", entity.getFoodData().getFoodLevel());
-        playerNbt.putInt("foodTickTimer", foodTickTimer);
-        playerNbt.putFloat("foodSaturationLevel", entity.getFoodData().getSaturationLevel());
-        playerNbt.putFloat("foodExhaustionLevel", entity.getFoodData().exhaustionLevel);
         playerNbt.putShort("Fire", (short) entity.getRemainingFireTicks());
-        playerNbt.put("Inventory", npcPlayer.getInventory().save(new ListTag()));
+        TagValueOutput output = TagValueOutput.createWrappingWithContext(ProblemReporter.DISCARDING, ((CraftPlayer) player).getHandle().registryAccess(), playerNbt);
+        entity.getFoodData().addAdditionalSaveData(output);
+        NbtUtils.addCurrentDataVersion(output);
+        npcPlayer.getInventory().save(output.list("Inventory", ItemStackWithSlot.CODEC));
+        EntityEquipment equipment = new EntityEquipment();
+        for (EquipmentSlot slot : EquipmentSlot.values()) {
+            equipment.set(slot, npcPlayer.getItemBySlot(slot));
+        }
+        output.store("equipment", EntityEquipment.CODEC, equipment);
 
         File file1 = new File(worldStorage.getPlayerDir(), identity.getId() + ".dat.tmp");
         File file2 = new File(worldStorage.getPlayerDir(), identity.getId() + ".dat");
 
         try {
-            NbtIo.writeCompressed(playerNbt, new FileOutputStream(file1));
+            CompoundTag compoundTag = output.buildResult();
+            NbtIo.writeCompressed(compoundTag, new FileOutputStream(file1));
         } catch (IOException e) {
             throw new RuntimeException("Failed to save player data for " + identity.getName(), e);
         }

@@ -89,6 +89,8 @@ hacks:
     # its stinger and thus die when successfully attacking an entity.
     # Default: 1.0 (100%)
     severStingerChance: 1.0
+  BrewIndex:
+    enabled: true
   BuffSpanker:
     enabled: true
     # The list of PotionEffectType's that you do not wish players to receive.
@@ -99,6 +101,10 @@ hacks:
       - SLOW_FALLING
   DebugWand:
     enabled: true
+  ServerLinksHack:
+    enabled: false
+    discordUrl: https://discord.gg/ [...]
+    patreonUrl: https://www.patreon.com/ [...]
   DogFacts:
     enabled: false
     intervalTime: 30m
@@ -126,7 +132,7 @@ hacks:
     disableEnderCrystalDamage: true
     disableMiningFatigue: true
     canEquipBanners: true
-    disableLavaCobbleMountains: true
+    disableLavaCobbleMountains: false
     disableWanderingTrader: true
     preventPearlGlitching: true
     preventUsingEyeOfEnder: true
@@ -137,6 +143,8 @@ hacks:
   ItemSerializerHack:
     enabled: true
   MapCopyProtection:
+    enabled: true
+  NameLocker:
     enabled: true
   OldEnchanting:
     enabled: true
@@ -251,6 +259,14 @@ hacks:
     clearOnMatch: true
     watchedMaterials:
       - CHEST
+      - TRAPPED_CHEST
+      - COPPER_CHEST
+      - EXPOSED_COPPER_CHEST
+      - OXIDIZED_COPPER_CHEST
+      - WEATHERED_COPPER_CHEST
+      - WAXED_COPPER_CHEST
+      - WAXED_EXPOSED_COPPER_CHEST
+      - WAXED_OXIDIZED_COPPER_CHEST
       - FURNACE
       - DROPPER
       - DISPENSER
@@ -276,14 +292,6 @@ hacks:
     delay: 10000
     message: '%Victim% was combat tagged by %Attacker%'
     broadcast: [ OP, CONSOLE ]
-  DisableAI:
-    enabled: true
-    # Specify below the living entities and their spawning circumstances you want to disable the AI for.
-    # NOTE: See https://papermc.io/javadocs/paper/1.16/org/bukkit/entity/EntityType.html
-    # NOTE: See https://papermc.io/javadocs/paper/1.16/org/bukkit/event/entity/CreatureSpawnEvent.SpawnReason.html
-    # Note: You can also just state "ALL" for all spawn circumstances
-    VILLAGER: ALL
-    ENDERMITE: [ DISPENSE_EGG, EGG, SPAWNER_EGG ]
   ElytraFeatures:
     enabled: true
     # Whether Elytra flight should be outright disabled
@@ -440,8 +448,6 @@ hacks:
         - "   &lBrewery&r:\n Custom brewing of booze and more.\n&lMore Info:&r &oBukkit Page:&r tinyurl.com/bukkitbrewp"
         - "   &oFurther Info&r\nVisit our subreddit at: &oreddit.com/r/Devoted&r"
         - "We extend our appreciation to the devs, admins, and players at: &oreddit.com/r/Civcraft"
-  InvControl:
-    enabled: true
   NewfriendAssist:
     enabled: true
     announce: '&f%Player% is brand new!'
@@ -453,7 +459,7 @@ hacks:
       enabled: true
       contents:
         - ==: org.bukkit.inventory.ItemStack
-          v: 1
+          v: 3839
           type: COOKIE
           amount: 32
           meta:
@@ -464,7 +470,7 @@ hacks:
               - "Gift from the Admins as you"
               - "begin your journey on Devotion."
         - ==: org.bukkit.inventory.ItemStack
-          v: 1
+          v: 3839
           type: RED_BED
           amount: 1
           meta:
@@ -559,3 +565,21 @@ hacks:
     enabled: false
     server: main
     world: world
+  TooHappyGhasts:
+    enabled: true
+  PlayerCap:
+    enabled: true
+  FairPlay:
+    enabled: true
+  PlayerCount:
+    enabled: false
+  Trowel:
+    enabled: true
+  MobCulling:
+    enabled: false
+    turtleAllowance: 100
+    turtleMaxAge: 360000
+    striderAllowance: 100
+    striderMaxAge: 360000
+  NetheriteCrafting:
+    enabled: true

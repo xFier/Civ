@@ -5,7 +5,6 @@ import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
 import java.util.logging.Level;
-import org.bukkit.Bukkit;
 import org.bukkit.configuration.serialization.ConfigurationSerializable;
 import org.bukkit.configuration.serialization.ConfigurationSerialization;
 import org.bukkit.event.EventHandler;
@@ -20,18 +19,8 @@ public abstract class ACivMod extends JavaPlugin {
 
     private final Set<Class<? extends ConfigurationSerializable>> configClasses = new HashSet<>(0);
 
-    /**
-     * Primary constructor used by the real server
-     */
     protected ACivMod() {
         super();
-    }
-
-    /**
-     * Secondary constructor used for testing
-     */
-    protected ACivMod(JavaPluginLoader loader, PluginDescriptionFile description, File dataFolder, File file) {
-        super(loader, description, dataFolder, file);
     }
 
     @Override

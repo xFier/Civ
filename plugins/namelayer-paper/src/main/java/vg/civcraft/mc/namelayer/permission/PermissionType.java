@@ -6,39 +6,21 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
-import java.util.TreeMap;
 import org.bukkit.Bukkit;
 import vg.civcraft.mc.namelayer.GroupManager.PlayerType;
-import vg.civcraft.mc.namelayer.NameLayerPlugin;
 
 
 public class PermissionType {
 
     private static Map<String, PermissionType> permissionByName;
-    private static Map<Integer, PermissionType> permissionById;
-    private static int maximumExistingId;
 
     public static void initialize() {
         permissionByName = new HashMap<>();
-        permissionById = new TreeMap<>();
-        maximumExistingId = 0;
-        Map<Integer, String> dbRegisteredPerms = NameLayerPlugin.getGroupManagerDao().getPermissionMapping();
-        for (Entry<Integer, String> perm : dbRegisteredPerms.entrySet()) {
-            int id = perm.getKey();
-            String name = perm.getValue();
-            maximumExistingId = Math.max(maximumExistingId, id);
-            internalRegisterPermission(id, name, new ArrayList<>(), null, true);
-        }
         registerNameLayerPermissions();
     }
 
     public static PermissionType getPermission(String name) {
         return permissionByName.get(name);
-    }
-
-    public static PermissionType getPermission(int id) {
-        return permissionById.get(id);
     }
 
     public static PermissionType registerPermission(String name, List<PlayerType> defaultPermLevels) {
@@ -60,20 +42,12 @@ public class PermissionType {
             return existing;
         }
         //not in db yet
-        int id = maximumExistingId + 1;
-        maximumExistingId = id;
-        PermissionType perm = internalRegisterPermission(id, name, defaultPermLevels, description, canBeBlacklisted);
-        NameLayerPlugin.getGroupManagerDao().registerPermission(perm);
-        if (!defaultPermLevels.isEmpty()) {
-            NameLayerPlugin.getGroupManagerDao().addNewDefaultPermission(defaultPermLevels, perm);
-        }
-        return perm;
+        return internalRegisterPermission(name, defaultPermLevels, description, canBeBlacklisted);
     }
 
-    private static PermissionType internalRegisterPermission(int id, String name, List<PlayerType> defaultPermLevels, String description, boolean canBeBlackListed) {
-        PermissionType p = new PermissionType(name, id, defaultPermLevels, description, canBeBlackListed);
+    private static PermissionType internalRegisterPermission(String name, List<PlayerType> defaultPermLevels, String description, boolean canBeBlackListed) {
+        PermissionType p = new PermissionType(name, defaultPermLevels, description, canBeBlackListed);
         permissionByName.put(name, p);
-        permissionById.put(id, p);
         return p;
     }
 
@@ -112,26 +86,22 @@ public class PermissionType {
         registerPermission("PERMS", new ArrayList<>(owner), "Allows modifying permissions for this group");
         //allows deleting the group
         registerPermission("DELETE", new ArrayList<>(owner), "Allows deleting this group");
-        //allows merging the group with another one
-        registerPermission("MERGE", new ArrayList<>(owner), "Allows merging this group into another or merging another group into this one");
-        //allows linking this group to another
-        registerPermission("LINKING", new ArrayList<>(owner), "Allows linking this group to another group as a supergroup or a subgroup");
         //allows opening the gui
         registerPermission("OPEN_GUI", new ArrayList<>(all), "Allows opening the GUI for this group");
 
         //perm level given to members when they join with a password
         registerPermission("JOIN_PASSWORD", members);
+        //allows editing a groups color
+        registerPermission("EDIT_COLOR", new ArrayList<>(adminAndAbove), "Allows editing the color of the group");
     }
 
     private String name;
     private List<PlayerType> defaultPermLevels;
-    private int id;
     private String description;
     private boolean canBeBlacklisted;
 
-    private PermissionType(String name, int id, List<PlayerType> defaultPermLevels, String description, boolean canBeBlacklisted) {
+    private PermissionType(String name, List<PlayerType> defaultPermLevels, String description, boolean canBeBlacklisted) {
         this.name = name;
-        this.id = id;
         this.defaultPermLevels = defaultPermLevels;
         this.description = description;
         this.canBeBlacklisted = canBeBlacklisted;
@@ -143,10 +113,6 @@ public class PermissionType {
 
     public List<PlayerType> getDefaultPermLevels() {
         return defaultPermLevels;
-    }
-
-    public int getId() {
-        return id;
     }
 
     public String getDescription() {
@@ -162,5 +128,11 @@ public class PermissionType {
 
     public boolean getCanBeBlacklisted() {
         return canBeBlacklisted;
+    }
+
+    /// Tests whether this permission is an "owner" permission, meaning that, ***by default***, only [PlayerType#OWNER]
+    /// can use it.
+    public boolean isOwnerPermission() {
+        return List.of(PlayerType.OWNER).equals(this.defaultPermLevels);
     }
 }

@@ -21,6 +21,7 @@ import com.untamedears.jukealert.model.actions.impl.LoginAction;
 import com.untamedears.jukealert.model.actions.impl.LogoutAction;
 import com.untamedears.jukealert.model.actions.impl.MountEntityAction;
 import com.untamedears.jukealert.model.actions.impl.OpenContainerAction;
+import com.untamedears.jukealert.model.actions.impl.PlaceVehicleAction;
 import com.untamedears.jukealert.util.JukeAlertPermissionHandler;
 import java.util.Collection;
 import java.util.HashSet;
@@ -31,14 +32,18 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.logging.Level;
 
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.World;
 import org.bukkit.block.DoubleChest;
 import org.bukkit.entity.Boat;
 import org.bukkit.entity.ChestBoat;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
+import org.bukkit.entity.HappyGhast;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.SpawnCategory;
@@ -56,6 +61,7 @@ import org.bukkit.event.block.SignChangeEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntityDismountEvent;
 import org.bukkit.event.entity.EntityMountEvent;
+import org.bukkit.event.entity.EntityPlaceEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.player.PlayerBucketEmptyEvent;
 import org.bukkit.event.player.PlayerBucketFillEvent;
@@ -70,7 +76,8 @@ import org.bukkit.event.vehicle.VehicleExitEvent;
 import org.bukkit.event.vehicle.VehicleMoveEvent;
 import org.bukkit.inventory.BlockInventoryHolder;
 import org.bukkit.inventory.InventoryHolder;
-import vg.civcraft.mc.namelayer.NameAPI;
+import org.bukkit.plugin.Plugin;
+import vg.civcraft.mc.namelayer.NameLayerAPI;
 
 public class LoggableActionListener implements Listener {
 
@@ -80,6 +87,24 @@ public class LoggableActionListener implements Listener {
     public LoggableActionListener(SnitchManager snitchManager) {
         this.snitchManager = snitchManager;
         this.insideFields = new TreeMap<>();
+    }
+
+    public void setupScheduler(Plugin plugin) {
+        Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            try {
+                for (World world : Bukkit.getWorlds()) {
+                    for (Player player : world.getPlayers()) {
+                        Entity entity = player.getVehicle();
+                        if (!(entity instanceof HappyGhast)) {
+                            continue;
+                        }
+                        handleSnitchEntry(player, entity.getLocation());
+                    }
+                }
+            } catch (RuntimeException ex) {
+                plugin.getLogger().log(Level.WARNING, "Ticking ghast positions", ex);
+            }
+        }, 0, 1);
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -154,6 +179,20 @@ public class LoggableActionListener implements Listener {
 
         handlePlayerAction(player, s -> new DestroyVehicleAction(System.currentTimeMillis(), s,
             player.getUniqueId(), event.getVehicle().getLocation(), getEntityName(event.getVehicle())));
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onPlaceVehicle(EntityPlaceEvent event) {
+        Player player = event.getPlayer();
+        if (player == null) {
+            return;
+        }
+        Entity entity = event.getEntity();
+        if (!(entity instanceof Vehicle vehicle) || vehicle.getSpawnCategory() != SpawnCategory.MISC) {
+            return;
+        }
+        handlePlayerAction(player, s -> new PlaceVehicleAction(System.currentTimeMillis(), s,
+            player.getUniqueId(), entity.getLocation(), getVehiclePlaceName(entity)));
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -244,7 +283,7 @@ public class LoggableActionListener implements Listener {
             location, material));
     }
 
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.MONITOR)
     public void playerJoinEvent(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         Set<Snitch> covering = new HashSet<>(snitchManager.getSnitchesCovering(event.getPlayer().getLocation()));
@@ -252,7 +291,7 @@ public class LoggableActionListener implements Listener {
         insideFields.put(event.getPlayer().getUniqueId(), covering);
     }
 
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.LOW)
     public void playerQuitEvent(PlayerQuitEvent event) {
         handleSnitchLogout(event.getPlayer());
     }
@@ -299,7 +338,7 @@ public class LoggableActionListener implements Listener {
         if (isPlayerSnitchImmune(player)) {
             return;
         }
-        if (!player.getMetadata("NPC").isEmpty() || NameAPI.getCurrentName(player.getUniqueId()) == null) {
+        if (!player.getMetadata("NPC").isEmpty() || NameLayerAPI.getCurrentName(player.getUniqueId()) == null) {
             //CombatTagPlus
             return;
         }
@@ -335,6 +374,14 @@ public class LoggableActionListener implements Listener {
             return boat.getBoatMaterial().name();
         } else {
             return vehicle.getType().toString();
+        }
+    }
+
+    private String getVehiclePlaceName(Entity entity) {
+        if (entity instanceof Boat boat) {
+            return boat.getBoatMaterial().name();
+        } else {
+            return entity.getType().toString();
         }
     }
 

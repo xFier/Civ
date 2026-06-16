@@ -10,11 +10,34 @@ sql:
   max_lifetime: 7200000
 groups:
   enable: true
-  interact: false
   grouplimit: 35
   creationOnFirstJoin: true
+rabbitmq:
+  enabled: true
+  serverId: pvp
+  user: ${CIV_RABBITMQ_USERNAME}
+  password: ${CIV_RABBITMQ_PASSWORD}
+  host: ${CIV_RABBITMQ_HOST}
+  port: 5672
+  freshnessCheck:
+    enabled: true
+    intervalSeconds: 300
+    jitterSeconds: 30
+    staleGraceSeconds: 300
 persistance:
   forceloadnamecaching: true
 nameRandomizer:
  active: false
  grace: 600000
+
+nameapi:
+  database:
+    user: ${CIV_MYSQL_USERNAME}
+    password: ${CIV_MYSQL_PASSWORD}
+    host: ${CIV_MYSQL_HOST}
+    port: 3306
+    database: civproxy
+    poolsize: 1
+    connection_timeout: 10000
+    idle_timeout: 600000
+    max_lifetime: 7200000

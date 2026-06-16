@@ -10,7 +10,9 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import org.apache.commons.lang.StringUtils;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import org.apache.commons.lang3.StringUtils;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.block.Biome;
@@ -47,8 +49,7 @@ public class RealisticBiomesGUI {
             currentBiome = biome;
         }
         if (inventory == null) {
-            String biomeText = (currentBiome.toString().toLowerCase()).replace("_", " ");
-            biomeText = StringUtils.capitalize(biomeText);
+            String biomeText = PlainTextComponentSerializer.plainText().serialize(Component.translatable(currentBiome));
             biomeText = StringUtils.abbreviate(biomeText, 30);
             inventory = new ComponableInventory(ChatColor.DARK_GRAY + biomeText, 6, player);
         } else {

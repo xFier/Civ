@@ -6,10 +6,11 @@ import isaac.bastion.BastionType;
 import isaac.bastion.Permissions;
 import isaac.bastion.utils.BastionSettingManager;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.SortedMap;
+import java.util.TreeMap;
 import java.util.UUID;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -27,7 +28,7 @@ import vg.civcraft.mc.civmodcore.players.scoreboard.side.ScoreBoardAPI;
 import vg.civcraft.mc.civmodcore.players.settings.PlayerSetting;
 import vg.civcraft.mc.civmodcore.players.settings.SettingChangeListener;
 import vg.civcraft.mc.civmodcore.players.settings.impl.DisplayLocationSetting;
-import vg.civcraft.mc.namelayer.NameAPI;
+import vg.civcraft.mc.namelayer.NameLayerAPI;
 import vg.civcraft.mc.namelayer.permission.PermissionType;
 
 public class ModeListener implements Listener {
@@ -107,37 +108,41 @@ public class ModeListener implements Listener {
             }
             return;
         }
-        Set<BastionType> alliedBastions = new HashSet<>();
-        Set<BastionType> enemyBastions = new HashSet<>();
+
+        SortedMap<BastionType, Boolean> alliedBastions = new TreeMap<>();
+        SortedMap<BastionType, Boolean> enemyBastions = new TreeMap<>();
         for (BastionBlock bastion : bastionBlocks) {
-            if (NameAPI.getGroupManager().hasAccess(bastion.getGroup(), player.getUniqueId(), placePerm)) {
-                alliedBastions.add(bastion.getType());
+            if (NameLayerAPI.getGroupManager().hasAccess(bastion.getGroup(), player.getUniqueId(), placePerm)) {
+                alliedBastions.merge(bastion.getType(), bastion.isMature(), Boolean::logicalAnd);
             } else {
-                enemyBastions.add(bastion.getType());
+                enemyBastions.merge(bastion.getType(), bastion.isMature(), Boolean::logicalAnd);
             }
         }
         if (!alliedBastions.isEmpty() && !enemyBastions.isEmpty()) {
             updateDisplaySetting(player,
                 String.format("%s%sConflict Bastion %s[%s] %s[%s]", ChatColor.YELLOW, ChatColor.BOLD,
-                    ChatColor.GREEN, buildBastionTypeList(alliedBastions), ChatColor.RED,
-                    buildBastionTypeList(enemyBastions)));
+                    ChatColor.GREEN, buildBastionTypeList(alliedBastions, ChatColor.GREEN),
+                    ChatColor.RED, buildBastionTypeList(enemyBastions, ChatColor.RED)));
             return;
         }
         if (!alliedBastions.isEmpty()) {
             updateDisplaySetting(player,
-                String.format("%sAlly Bastion [%s]", ChatColor.GREEN, buildBastionTypeList(alliedBastions)));
+                String.format("%sAlly Bastion [%s]", ChatColor.GREEN, buildBastionTypeList(alliedBastions, ChatColor.GREEN)));
             return;
         }
-        updateDisplaySetting(player, String.format("%s%sEnemy Bastion [%s]", ChatColor.RED, ChatColor.BOLD,
-            buildBastionTypeList(enemyBastions)));
+        updateDisplaySetting(player, String.format("%s%sHostile Bastion [%s]", ChatColor.RED, ChatColor.BOLD,
+            buildBastionTypeList(enemyBastions, ChatColor.RED)));
     }
 
-    private String buildBastionTypeList(Set<BastionType> types) {
+    private String buildBastionTypeList(SortedMap<BastionType, Boolean> types, ChatColor baseColor) {
         List<String> identifiers = new ArrayList<>();
-        for (BastionType type : types) {
-            identifiers.add(type.getOverlayName());
+        for (Map.Entry<BastionType, Boolean> entry : types.entrySet()) {
+            String name = entry.getKey().getOverlayName();
+            if (!entry.getValue()) {
+                name = ChatColor.ITALIC + name + baseColor;
+            }
+            identifiers.add(name);
         }
-        Collections.sort(identifiers);
         return String.join(",", identifiers);
     }
 

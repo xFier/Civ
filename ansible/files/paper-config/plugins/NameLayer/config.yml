@@ -12,6 +12,18 @@ groups:
   enable: true
   grouplimit: 35
   creationOnFirstJoin: true
+rabbitmq:
+  enabled: true
+  serverId: main
+  user: ${CIV_RABBITMQ_USERNAME}
+  password: ${CIV_RABBITMQ_PASSWORD}
+  host: ${CIV_RABBITMQ_HOST}
+  port: 5672
+  freshnessCheck:
+    enabled: true
+    intervalSeconds: 300
+    jitterSeconds: 30
+    staleGraceSeconds: 300
 persistance:
   forceloadnamecaching: true
 #name_cleanser:
@@ -34,8 +46,20 @@ persistance:
 #  clean_names: true
 ## Do we alert OPs when a name is changed b/c dirty?
 #  alert_ops: true
-## Do we alert people who have this permission, when a name is changed b/c dirty? 
+## Do we alert people who have this permission, when a name is changed b/c dirty?
 #  alert_perm: namelayer.alert_dirty_name
 nameRandomizer:
  active: false
  grace: 600000
+
+nameapi:
+  database:
+    user: ${CIV_MYSQL_USERNAME}
+    password: ${CIV_MYSQL_PASSWORD}
+    host: ${CIV_MYSQL_HOST}
+    port: 3306
+    database: civproxy
+    poolsize: 1
+    connection_timeout: 10000
+    idle_timeout: 600000
+    max_lifetime: 7200000

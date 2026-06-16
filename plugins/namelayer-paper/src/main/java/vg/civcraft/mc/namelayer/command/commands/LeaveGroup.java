@@ -7,7 +7,7 @@ import co.aikar.commands.annotation.Syntax;
 import java.util.UUID;
 import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
-import vg.civcraft.mc.namelayer.NameAPI;
+import vg.civcraft.mc.namelayer.NameLayerAPI;
 import vg.civcraft.mc.namelayer.command.BaseCommandMiddle;
 import vg.civcraft.mc.namelayer.group.Group;
 
@@ -23,7 +23,7 @@ public class LeaveGroup extends BaseCommandMiddle {
         if (groupIsNull(sender, groupName, g)) {
             return;
         }
-        UUID uuid = NameAPI.getUUID(p.getName());
+        UUID uuid = NameLayerAPI.getUUID(p.getName());
         if (!g.isCurrentMember(uuid)) {
             p.sendMessage(ChatColor.RED + "You are not a member of this group.");
             return;
@@ -32,7 +32,12 @@ public class LeaveGroup extends BaseCommandMiddle {
             p.sendMessage(ChatColor.RED + "This group is disciplined.");
             return;
         }
-        g.removeMember(uuid);
-        p.sendMessage(ChatColor.GREEN + "You have been removed from the group.");
+        g.removeMemberAsync(uuid, uuid, result -> {
+            if (result.success()) {
+                p.sendMessage(ChatColor.GREEN + "You have been removed from the group.");
+            } else {
+                p.sendMessage(ChatColor.RED + result.message());
+            }
+        });
     }
 }

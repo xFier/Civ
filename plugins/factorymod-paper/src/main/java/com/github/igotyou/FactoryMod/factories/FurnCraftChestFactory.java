@@ -5,8 +5,6 @@ import com.github.igotyou.FactoryMod.events.FactoryActivateEvent;
 import com.github.igotyou.FactoryMod.events.RecipeExecuteEvent;
 import com.github.igotyou.FactoryMod.interactionManager.IInteractionManager;
 import com.github.igotyou.FactoryMod.powerManager.FurnacePowerManager;
-import com.github.igotyou.FactoryMod.utility.Direction;
-import com.github.igotyou.FactoryMod.utility.IIOFInventoryProvider;
 import com.github.igotyou.FactoryMod.powerManager.IPowerManager;
 import com.github.igotyou.FactoryMod.recipes.IRecipe;
 import com.github.igotyou.FactoryMod.recipes.InputRecipe;
@@ -17,8 +15,11 @@ import com.github.igotyou.FactoryMod.recipes.Upgraderecipe;
 import com.github.igotyou.FactoryMod.repairManager.IRepairManager;
 import com.github.igotyou.FactoryMod.repairManager.PercentageHealthRepairManager;
 import com.github.igotyou.FactoryMod.structures.FurnCraftChestStructure;
+import com.github.igotyou.FactoryMod.utility.Direction;
+import com.github.igotyou.FactoryMod.utility.IIOFInventoryProvider;
 import com.github.igotyou.FactoryMod.utility.IOSelector;
 import com.github.igotyou.FactoryMod.utility.LoggingUtils;
+import com.github.igotyou.FactoryMod.utility.MultiInventoryWrapper;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -26,11 +27,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
-
-import com.github.igotyou.FactoryMod.utility.MultiInventoryWrapper;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
+import org.bukkit.Tag;
+import org.bukkit.block.Barrel;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.Chest;
@@ -43,7 +44,7 @@ import org.jetbrains.annotations.Nullable;
 import vg.civcraft.mc.citadel.ReinforcementLogic;
 import vg.civcraft.mc.citadel.model.Reinforcement;
 import vg.civcraft.mc.civmodcore.inventory.items.ItemUtils;
-import vg.civcraft.mc.namelayer.NameAPI;
+import vg.civcraft.mc.namelayer.NameLayerAPI;
 import vg.civcraft.mc.namelayer.permission.PermissionType;
 
 /**
@@ -106,7 +107,8 @@ public class FurnCraftChestFactory extends Factory implements IIOFInventoryProvi
      * should be
      */
     public Inventory getInventory() {
-        if (getChest().getType() != Material.CHEST && getChest().getType() != Material.TRAPPED_CHEST) {
+        // do not need to check for barrels because they are not included in the getChest() function, which is used for double chest detection/force loading
+        if (getChest().getType() != Material.CHEST && getChest().getType() != Material.TRAPPED_CHEST && !Tag.COPPER_CHESTS.isTagged(getChest().getType())) {
             return null;
         }
         Chest chestBlock = (Chest) (getChest().getState());
@@ -142,15 +144,21 @@ public class FurnCraftChestFactory extends Factory implements IIOFInventoryProvi
         BlockFace facing = getFacing();
         for (BlockFace relativeFace : ioTypeFunc.apply(getFurnaceIOSelector()).apply(facing)) {
             Block relBlock = fblock.getRelative(relativeFace);
-            if (relBlock.getType() == Material.CHEST || relBlock.getType() == Material.TRAPPED_CHEST) {
+            if (relBlock.getType() == Material.CHEST || relBlock.getType() == Material.TRAPPED_CHEST || Tag.COPPER_CHESTS.isTagged(relBlock.getType())) {
                 combinedInvList.add(((Chest) relBlock.getState()).getInventory());
+            }
+            if (relBlock.getType() == Material.BARREL) {
+                combinedInvList.add(((Barrel) relBlock.getState()).getInventory());
             }
         }
         Block tblock = fccs.getCraftingTable();
         for (BlockFace relativeFace : ioTypeFunc.apply(getTableIOSelector()).apply(facing)) {
             Block relBlock = tblock.getRelative(relativeFace);
-            if (relBlock.getType() == Material.CHEST || relBlock.getType() == Material.TRAPPED_CHEST) {
+            if (relBlock.getType() == Material.CHEST || relBlock.getType() == Material.TRAPPED_CHEST || Tag.COPPER_CHESTS.isTagged(relBlock.getType())) {
                 combinedInvList.add(((Chest) relBlock.getState()).getInventory());
+            }
+            if (relBlock.getType() == Material.BARREL) {
+                combinedInvList.add(((Barrel) relBlock.getState()).getInventory());
             }
         }
     }
@@ -349,6 +357,12 @@ public class FurnCraftChestFactory extends Factory implements IIOFInventoryProvi
             return;
         }
 
+        // Check that there is an output selected at all
+        if (furnaceIoSelector.getOutputCount() == 0 && tableIoSelector.getOutputCount() == 0) {
+            p.sendMessage(String.format("%sFailed to activate factory, it has no IO Outputs configured", ChatColor.RED));
+            return;
+        }
+
         if (!onStartUp && currentRecipe instanceof Upgraderecipe && FactoryMod.getInstance().getManager().isCitadelEnabled()) {
             // only allow permitted members to upgrade the factory
             Reinforcement rein = ReinforcementLogic.getReinforcementAt(mbs.getCenter());
@@ -356,7 +370,7 @@ public class FurnCraftChestFactory extends Factory implements IIOFInventoryProvi
                 if (p == null) {
                     return;
                 }
-                if (!NameAPI.getGroupManager().hasAccess(rein.getGroup().getName(), p.getUniqueId(),
+                if (!NameLayerAPI.getGroupManager().hasAccess(rein.getGroup().getName(), p.getUniqueId(),
                     PermissionType.getPermission("UPGRADE_FACTORY"))) {
                     p.sendMessage(ChatColor.RED + "You dont have permission to upgrade this factory");
                     return;
@@ -538,6 +552,14 @@ public class FurnCraftChestFactory extends Factory implements IIOFInventoryProvi
                 // if the production timer has reached the recipes production
                 // time remove input from chest, and add output material
                 else {
+                    // check that there is an output to place the item
+                    // check is put here instead of on fuel tick for performance reasons, but will waste charcoal
+                    if (getOutputInventory().getSize() == 0) {
+                        sendActivatorMessage(ChatColor.RED + currentRecipe.getName() + " in " + name + " deactivated because it has no output inventory");
+                        deactivate();
+                        return;
+                    }
+
                     LoggingUtils.log("Executing recipe " + currentRecipe.getName() + " for " + getLogData());
                     if (currentRecipe instanceof InputRecipe) {
                         RecipeExecuteEvent ree = new RecipeExecuteEvent(this, (InputRecipe) currentRecipe);

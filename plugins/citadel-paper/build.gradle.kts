@@ -1,5 +1,5 @@
 plugins {
-    id("io.papermc.paperweight.userdev")
+    alias(libs.plugins.paper.userdev)
 }
 
 version = "5.2.4"
@@ -12,5 +12,5 @@ dependencies {
     compileOnly(project(":plugins:civmodcore-paper"))
     compileOnly(project(":plugins:namelayer-paper"))
 
-    compileOnly(libs.protocollib)
+    compileOnly(libs.packetevents.spigot)
 }

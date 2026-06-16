@@ -9,7 +9,7 @@ import org.bukkit.ChatColor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import vg.civcraft.mc.namelayer.GroupManager.PlayerType;
-import vg.civcraft.mc.namelayer.NameAPI;
+import vg.civcraft.mc.namelayer.NameLayerAPI;
 import vg.civcraft.mc.namelayer.command.BaseCommandMiddle;
 import vg.civcraft.mc.namelayer.group.Group;
 
@@ -25,7 +25,7 @@ public class SetDefaultGroup extends BaseCommandMiddle {
             return;
         }
         Player p = (Player) sender;
-        UUID uuid = NameAPI.getUUID(p.getName());
+        UUID uuid = NameLayerAPI.getUUID(p.getName());
         Group g = gm.getGroup(groupName);
         if (groupIsNull(sender, groupName, g)) {
             return;
@@ -39,11 +39,21 @@ public class SetDefaultGroup extends BaseCommandMiddle {
 
         String x = gm.getDefaultGroup(uuid);
         if (x == null) {
-            g.setDefaultGroup(uuid);
-            p.sendMessage(ChatColor.GREEN + "You have set your default group to " + g.getName());
+            g.setDefaultGroupAsync(uuid, result -> {
+                if (result.success()) {
+                    p.sendMessage(ChatColor.GREEN + "You have set your default group to " + g.getName());
+                } else {
+                    p.sendMessage(ChatColor.RED + result.message());
+                }
+            });
         } else {
-            g.changeDefaultGroup(uuid);
-            p.sendMessage(ChatColor.GREEN + "You changed your default group from " + x + " to " + gm.getDefaultGroup(uuid));
+            g.changeDefaultGroupAsync(uuid, result -> {
+                if (result.success()) {
+                    p.sendMessage(ChatColor.GREEN + "You changed your default group from " + x + " to " + gm.getDefaultGroup(uuid));
+                } else {
+                    p.sendMessage(ChatColor.RED + result.message());
+                }
+            });
         }
     }
 }

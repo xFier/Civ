@@ -1,9 +1,5 @@
 plugins {
-    id("io.papermc.paperweight.userdev")
-}
-
-repositories {
-    maven("https://repo.dmulloy2.net/repository/public")
+    alias(libs.plugins.paper.userdev)
 }
 
 version = "2.1.0"
@@ -18,6 +14,6 @@ dependencies {
     compileOnly(project(":plugins:namelayer-paper"))
     compileOnly(project(":plugins:citadel-paper"))
     compileOnly(project(":plugins:combattagplus-paper"))
-
-    compileOnly(libs.protocollib)
+    compileOnly(libs.mythic.dist)
+    compileOnly(libs.packetevents.spigot)
 }

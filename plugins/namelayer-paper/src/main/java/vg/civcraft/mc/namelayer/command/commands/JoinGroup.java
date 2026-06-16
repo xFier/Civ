@@ -7,7 +7,7 @@ import java.util.UUID;
 import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 import vg.civcraft.mc.namelayer.GroupManager.PlayerType;
-import vg.civcraft.mc.namelayer.NameAPI;
+import vg.civcraft.mc.namelayer.NameLayerAPI;
 import vg.civcraft.mc.namelayer.NameLayerPlugin;
 import vg.civcraft.mc.namelayer.command.BaseCommandMiddle;
 import vg.civcraft.mc.namelayer.group.Group;
@@ -26,7 +26,7 @@ public class JoinGroup extends BaseCommandMiddle {
             return;
         }
         if (g.isDisciplined()) {
-            p.sendMessage(ChatColor.RED + "This group is disiplined.");
+            p.sendMessage(ChatColor.RED + "This group is disciplined.");
             return;
         }
         if (g.getPassword() == null) {
@@ -37,7 +37,7 @@ public class JoinGroup extends BaseCommandMiddle {
             p.sendMessage(ChatColor.RED + "That password is incorrect");
             return;
         }
-        UUID uuid = NameAPI.getUUID(p.getName());
+        UUID uuid = NameLayerAPI.getUUID(p.getName());
         GroupPermission groupPerm = gm.getPermissionforGroup(g);
         PlayerType pType = groupPerm.getFirstWithPerm(PermissionType.getPermission("JOIN_PASSWORD"));
         if (pType == null) {
@@ -53,7 +53,12 @@ public class JoinGroup extends BaseCommandMiddle {
             return;
         }
 
-        g.addMember(uuid, pType);
-        p.sendMessage(ChatColor.GREEN + "You have successfully been added to this group.");
+        g.joinGroupAsync(uuid, attemptedPassword, pType, result -> {
+            if (result.success()) {
+                p.sendMessage(ChatColor.GREEN + "You have successfully been added to this group.");
+            } else {
+                p.sendMessage(ChatColor.RED + result.message());
+            }
+        });
     }
 }

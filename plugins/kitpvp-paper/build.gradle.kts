@@ -1,6 +1,6 @@
 plugins {
-    id("io.papermc.paperweight.userdev")
-    id("com.github.johnrengelman.shadow")
+    alias(libs.plugins.paper.userdev)
+    alias(libs.plugins.shadow)
 }
 
 version = "1.0.0"
@@ -12,7 +12,9 @@ dependencies {
 
     compileOnly(project(":plugins:civmodcore-paper"))
     compileOnly(project(":plugins:finale-paper"))
+    compileOnly(libs.luckperms.api)
 
-    compileOnly(files("../../ansible/src/paper-plugins/BreweryX-3.4.10.jar"))
+    compileOnly(files("../../ansible/src/paper-plugins/BreweryX-3.6.3.jar"))
     compileOnly(libs.aswm.api)
+    compileOnly(libs.placeholderapi)
 }
