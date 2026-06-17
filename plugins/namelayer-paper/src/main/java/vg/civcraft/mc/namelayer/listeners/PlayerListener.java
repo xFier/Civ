@@ -26,13 +26,31 @@ public class PlayerListener implements Listener {
             handleFirstJoin(p);
         }
 
-        boolean shouldAutoAccept = NameLayerPlugin.getAutoAcceptHandler().getAutoAccept(uuid);
-        if (shouldAutoAccept) {
+        List<Group> notifications = getNotifications(uuid);
+        if (notifications.isEmpty()) {
             return;
         }
 
-        List<Group> notifications = getNotifications(uuid);
-        if (notifications.isEmpty()) {
+        boolean shouldAutoAccept = NameLayerPlugin.getAutoAcceptHandler().getAutoAccept(uuid);
+        if (shouldAutoAccept) {
+            // The invite-time auto-accept (proxy side) only fires when the invite originates on the
+            // same database the player toggled auto-accept on. Reconcile any invitations that were
+            // stored instead of accepted so auto-accept players never have to /nlag manually.
+            for (Group g : notifications) {
+                g.acceptInviteAsync(uuid, result -> {
+                    if (!result.success()) {
+                        NameLayerPlugin.log(Level.WARNING, "Failed to auto-accept invitation for " + uuid
+                            + " to group " + g.getName() + ": " + result.message());
+                    }
+                });
+            }
+
+            String accepted = "You have auto-accepted invitations from the following groups while you were away: ";
+            for (Group g : notifications) {
+                accepted += g.getName() + ", ";
+            }
+            accepted = accepted.substring(0, accepted.length() - 2) + ".";
+            p.sendMessage(ChatColor.YELLOW + accepted);
             return;
         }
 
