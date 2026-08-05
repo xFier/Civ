@@ -3,9 +3,11 @@ package com.github.igotyou.FactoryMod.recipes;
 import com.github.igotyou.FactoryMod.FactoryMod;
 import com.github.igotyou.FactoryMod.factories.FurnCraftChestFactory;
 import com.github.igotyou.FactoryMod.utility.MultiInventoryWrapper;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
+import net.kyori.adventure.text.Component;
 import org.bukkit.Material;
 import org.bukkit.Tag;
 import org.bukkit.inventory.Inventory;
@@ -13,7 +15,6 @@ import org.bukkit.inventory.ItemStack;
 import vg.civcraft.mc.civmodcore.inventory.ClonedInventory;
 import vg.civcraft.mc.civmodcore.inventory.InventoryUtils;
 import vg.civcraft.mc.civmodcore.inventory.items.ItemMap;
-import vg.civcraft.mc.civmodcore.inventory.items.ItemUtils;
 
 /**
  * Used to compact items, which means whole or multiple stacks of an item are reduced to a single lored item, which is stackable to the same stacksize
@@ -147,7 +148,7 @@ public class CompactingRecipe extends InputRecipe {
      */
     private void compact(ItemStack is, Inventory inputInv, Inventory outputInv) {
         ItemStack copy = is.clone();
-        copy.setAmount(getCompactStackSize(copy.getType()));
+        copy.setAmount(getCompactStackSize(copy));
         ItemMap toRemove = new ItemMap(copy);
         if (toRemove.removeSafelyFrom(inputInv)) {
             compactStack(copy);
@@ -159,15 +160,19 @@ public class CompactingRecipe extends InputRecipe {
      * Applies the lore and set the amount to 1. Dont call this directly if you want to compact items for players
      */
     private void compactStack(ItemStack is) {
-        ItemUtils.addLore(is, compactedLore);
+        is.editMeta(meta -> {
+            List<Component> lore = !meta.hasLore() ? new ArrayList<>() : meta.lore();
+            lore.add(Component.empty().append(Component.text(compactedLore)));
+            meta.lore(lore);
+        });
         is.setAmount(1);
     }
 
-    public static int getCompactStackSize(Material m) {
+    public static int getCompactStackSize(ItemStack m) {
         switch (m.getMaxStackSize()) {
             case 64:
                 return 64;
-            case 16:
+            case 16, 2:
                 return 16;
             case 1:
                 return 8;
@@ -192,7 +197,7 @@ public class CompactingRecipe extends InputRecipe {
         if (Tag.ITEMS_BUNDLES.isTagged(is.getType())) {
             return false;
         }
-        return im.getAmount(is) >= getCompactStackSize(is.getType());
+        return im.getAmount(is) >= getCompactStackSize(is);
     }
 
     @Override

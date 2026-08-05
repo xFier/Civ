@@ -348,7 +348,7 @@ public class FurnCraftChestFactory extends Factory implements IIOFInventoryProvi
         }
 
         // Ensure the recipe effect can be applied
-        var effectFeasibility = currentRecipe.evaluateEffectFeasibility(getInputInventory(), getOutputInventory());
+        var effectFeasibility = currentRecipe.evaluateEffectFeasibility(getInputInventory(), getOutputInventory(), this);
         if (!(effectFeasibility.isFeasible())) {
             LoggingUtils.log(String.format("Skipping activation of recipe [%s], since the effect wasn't feasible.", currentRecipe.getName()));
             if (p != null) {
@@ -386,7 +386,7 @@ public class FurnCraftChestFactory extends Factory implements IIOFInventoryProvi
             if (currentRecipe instanceof InputRecipe) {
                 int consumptionIntervall = ((InputRecipe) currentRecipe).getFuelConsumptionIntervall() > 0 ? ((InputRecipe) currentRecipe)
                     .getFuelConsumptionIntervall() : pm.getPowerConsumptionIntervall();
-                if (((FurnacePowerManager) pm).getFuelAmountAvailable() < (currentRecipe.getProductionTime() / consumptionIntervall)) {
+                if (((FurnacePowerManager) pm).getFuelAmountAvailable() < (currentRecipe.getProductionTime(this) / consumptionIntervall)) {
                     p.sendMessage(ChatColor.RED
                         + "You don't have enough fuel, the factory will run out of it before completing");
                 }
@@ -488,12 +488,18 @@ public class FurnCraftChestFactory extends Factory implements IIOFInventoryProvi
     @Override
     public void run() {
         if (active && mbs.isComplete()) {
+            Block f = getFurnace();
+            if (currentRecipe.mustBeLoaded() && !f.getWorld().isChunkLoaded(f.getLocation().getBlockX() >> 4, f.getLocation().getBlockZ() >> 4)) {
+                sendActivatorMessage(ChatColor.GOLD + name + " deactivated, because the chunk was unloaded");
+                deactivate();
+                return;
+            }
             // if the materials required to produce the current recipe are in
             // the factory inventory
             if (hasInputMaterials()) {
                 // if the factory has been working for less than the required
                 // time for the recipe
-                if (currentProductionTimer < currentRecipe.getProductionTime()) {
+                if (currentProductionTimer < currentRecipe.getProductionTime(this)) {
                     int consumptionIntervall;
                     if (currentRecipe instanceof InputRecipe) {
                         consumptionIntervall = ((InputRecipe) currentRecipe).getFuelConsumptionIntervall() > 0
@@ -824,6 +830,9 @@ public class FurnCraftChestFactory extends Factory implements IIOFInventoryProvi
 
     @Override
     public int getUpdateTime() {
+        if (!currentRecipe.canApplySpeed()) {
+            return updateTime;
+        }
         return switch (speedLevel) {
             case 0 -> updateTime;
             case 1 -> Math.ceilDiv(updateTime, 2);
