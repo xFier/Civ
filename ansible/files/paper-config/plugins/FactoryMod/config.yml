@@ -112,6 +112,7 @@ factories:
       - research_phase_2
       - make_armour_repair_kit
       - refine_crude_oil
+      - advanced_refine_crude_oil
       - make_space_chem_factory_kit
       - repair_space_chem_factory
       - repair_space_chem_factory_kit
@@ -1316,66 +1317,84 @@ factories:
       - make_fence_gates
       - make_signs
       - make_hanging_signs
+      - make_shelves
       - make_trapdoors
       - make_wood_doors
       - make_spruce_fences
       - make_spruce_fence_gates
       - make_spruce_signs
       - make_spruce_hanging_signs
+      - make_spruce_shelves
       - make_spruce_trapdoors
       - make_spruce_doors
       - make_birch_fences
       - make_birch_fence_gates
       - make_birch_signs
       - make_birch_hanging_signs
+      - make_birch_shelves
       - make_birch_trapdoors
       - make_birch_doors
       - make_jungle_fences
       - make_jungle_fence_gates
       - make_jungle_signs
       - make_jungle_hanging_signs
+      - make_jungle_shelves
       - make_jungle_trapdoors
       - make_jungle_doors
+      - make_bamboo_fences
+      - make_bamboo_fence_gates
+      - make_bamboo_signs
+      - make_bamboo_hanging_signs
+      - make_bamboo_trapdoors
+      - make_bamboo_doors
+      - make_bamboo_shelves
       - make_acacia_fences
       - make_acacia_fence_gates
       - make_acacia_signs
       - make_acacia_hanging_signs
+      - make_acacia_shelves
       - make_acacia_trapdoors
       - make_acacia_doors
       - make_dark_oak_fences
       - make_dark_oak_fence_gates
       - make_dark_oak_signs
       - make_dark_oak_hanging_signs
+      - make_dark_oak_shelves
       - make_dark_oak_trapdoors
       - make_dark_oak_doors
       - make_cherry_fences
       - make_cherry_fence_gates
       - make_cherry_signs
       - make_cherry_hanging_signs
+      - make_cherry_shelves
       - make_cherry_trapdoors
       - make_cherry_doors
       - make_mangrove_fences
       - make_mangrove_fence_gates
       - make_mangrove_signs
       - make_mangrove_hanging_signs
+      - make_mangrove_shelves
       - make_mangrove_trapdoors
       - make_mangrove_doors
       - make_pale_oak_fences
       - make_pale_oak_fence_gates
       - make_pale_oak_signs
       - make_pale_oak_hanging_signs
+      - make_pale_oak_shelves
       - make_pale_oak_trapdoors
       - make_pale_oak_doors
       - make_crimson_fences
       - make_crimson_fence_gates
       - make_crimson_signs
       - make_crimson_hanging_signs
+      - make_crimson_shelves
       - make_crimson_trapdoors
       - make_crimson_doors
       - make_warped_fences
       - make_warped_fence_gates
       - make_warped_signs
       - make_warped_hanging_signs
+      - make_warped_shelves
       - make_warped_trapdoors
       - make_warped_doors
       - repair_carpentry
@@ -1742,9 +1761,10 @@ factories:
       - decompact
       - make_mining_bundle
       - make_mob_bundle
-      - make_food_bundle
-      - make_plant_bundle
-      - make_sapling_bundle
+      - make_hot_bundle
+      - make_cold_bundle
+      - make_temperate_bundle
+      - make_humid_bundle
       - make_nether_bundle
       - make_space_bundle
       - make_compact_repair_kit
@@ -7437,6 +7457,22 @@ recipes:
         ==: org.bukkit.inventory.ItemStack
         type: OAK_HANGING_SIGN
         amount: 128
+  make_shelves:
+    production_time: 4s
+    name: Make Shelves
+    type: PRODUCTION
+    input:
+      chest:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: CHEST
+        amount: 12
+    output:
+      sign:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: OAK_SHELF
+        amount: 128
   make_ladders:
     production_time: 4s
     name: Make Ladders
@@ -7671,6 +7707,22 @@ recipes:
         ==: org.bukkit.inventory.ItemStack
         type: SPRUCE_HANGING_SIGN
         amount: 128
+  make_spruce_shelves:
+    production_time: 4s
+    name: Make Spruce Shelves
+    type: PRODUCTION
+    input:
+      chest:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: SPRUCE_LOG
+        amount: 24
+    output:
+      sign:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: SPRUCE_SHELF
+        amount: 128
   make_spruce_trapdoors:
     production_time: 4s
     name: Make Trap Doors
@@ -7772,6 +7824,22 @@ recipes:
         ==: org.bukkit.inventory.ItemStack
         type: BIRCH_HANGING_SIGN
         amount: 128
+  make_birch_shelves:
+    production_time: 4s
+    name: Make Birch Shelves
+    type: PRODUCTION
+    input:
+      chest:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: BIRCH_LOG
+        amount: 24
+    output:
+      sign:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: BIRCH_SHELF
+        amount: 128
   make_birch_trapdoors:
     production_time: 4s
     name: Make Trap Doors
@@ -7819,6 +7887,123 @@ recipes:
         v: 3839
         ==: org.bukkit.inventory.ItemStack
         type: BIRCH_FENCE_GATE
+        amount: 128
+  make_bamboo_fences:
+    production_time: 4s
+    name: Make Bamboo Fences
+    type: PRODUCTION
+    input:
+      BAMBOO_BLOCK:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: BAMBOO_BLOCK
+        amount: 32
+    output:
+      fence:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: BAMBOO_FENCE
+        amount: 128
+  make_bamboo_signs:
+    production_time: 4s
+    name: Make Bamboo Signs
+    type: PRODUCTION
+    input:
+      BAMBOO_BLOCK:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: BAMBOO_BLOCK
+        amount: 48
+    output:
+      sign:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: BAMBOO_SIGN
+        amount: 128
+  make_bamboo_hanging_signs:
+    production_time: 4s
+    name: Make Bamboo Hanging Signs
+    type: PRODUCTION
+    input:
+      chest:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: BAMBOO_BLOCK
+        amount: 24
+      iron_ingot:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: IRON_INGOT
+        amount: 4
+    output:
+      sign:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: BAMBOO_HANGING_SIGN
+        amount: 128
+  make_bamboo_trapdoors:
+    production_time: 4s
+    name: Make Trap Doors
+    type: PRODUCTION
+    input:
+      BAMBOO_BLOCK:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: BAMBOO_BLOCK
+        amount: 64
+    output:
+      trapdoor:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: BAMBOO_TRAPDOOR
+        amount: 128
+  make_bamboo_doors:
+    production_time: 4s
+    name: Make Doors
+    type: PRODUCTION
+    input:
+      BAMBOO_BLOCK:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: BAMBOO_BLOCK
+        amount: 48
+    output:
+      door:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: BAMBOO_DOOR
+        amount: 128
+  make_bamboo_fence_gates:
+    production_time: 4s
+    name: Make Fence Gates
+    type: PRODUCTION
+    input:
+      BAMBOO_BLOCK:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: BAMBOO_BLOCK
+        amount: 32
+    output:
+      door:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: BAMBOO_FENCE_GATE
+        amount: 128
+  make_bamboo_shelves:
+    production_time: 4s
+    name: Make Bamboo Shelves
+    type: PRODUCTION
+    input:
+      chest:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: BAMBOO_BLOCK
+        amount: 24
+    output:
+      sign:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: BAMBOO_SHELF
         amount: 128
   make_jungle_fences:
     production_time: 4s
@@ -7872,6 +8057,22 @@ recipes:
         v: 3839
         ==: org.bukkit.inventory.ItemStack
         type: JUNGLE_HANGING_SIGN
+        amount: 128
+  make_jungle_shelves:
+    production_time: 4s
+    name: Make Jungle Shelves
+    type: PRODUCTION
+    input:
+      chest:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: JUNGLE_LOG
+        amount: 24
+    output:
+      sign:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: JUNGLE_SHELF
         amount: 128
   make_jungle_trapdoors:
     production_time: 4s
@@ -7974,6 +8175,22 @@ recipes:
         ==: org.bukkit.inventory.ItemStack
         type: ACACIA_HANGING_SIGN
         amount: 128
+  make_acacia_shelves:
+    production_time: 4s
+    name: Make Acacia Shelves
+    type: PRODUCTION
+    input:
+      chest:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: ACACIA_LOG
+        amount: 24
+    output:
+      sign:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: ACACIA_SHELF
+        amount: 128
   make_acacia_trapdoors:
     production_time: 4s
     name: Make Trap Doors
@@ -8074,6 +8291,22 @@ recipes:
         v: 3839
         ==: org.bukkit.inventory.ItemStack
         type: DARK_OAK_HANGING_SIGN
+        amount: 128
+  make_dark_oak_shelves:
+    production_time: 4s
+    name: Make Dark Oak Shelves
+    type: PRODUCTION
+    input:
+      chest:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: DARK_OAK_LOG
+        amount: 24
+    output:
+      sign:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: DARK_OAK_SHELF
         amount: 128
   make_dark_oak_trapdoors:
     production_time: 4s
@@ -8176,6 +8409,22 @@ recipes:
         ==: org.bukkit.inventory.ItemStack
         type: CHERRY_HANGING_SIGN
         amount: 128
+  make_cherry_shelves:
+    production_time: 4s
+    name: Make Cherry Shelves
+    type: PRODUCTION
+    input:
+      chest:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: CHERRY_LOG
+        amount: 24
+    output:
+      sign:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: CHERRY_SHELF
+        amount: 128
   make_cherry_trapdoors:
     production_time: 4s
     name: Make Trap Doors
@@ -8276,6 +8525,22 @@ recipes:
         v: 3839
         ==: org.bukkit.inventory.ItemStack
         type: MANGROVE_HANGING_SIGN
+        amount: 128
+  make_mangrove_shelves:
+    production_time: 4s
+    name: Make Mangrove Shelves
+    type: PRODUCTION
+    input:
+      chest:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: MANGROVE_LOG
+        amount: 24
+    output:
+      sign:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: MANGROVE_SHELF
         amount: 128
   make_mangrove_trapdoors:
     production_time: 4s
@@ -8378,6 +8643,22 @@ recipes:
         ==: org.bukkit.inventory.ItemStack
         type: PALE_OAK_HANGING_SIGN
         amount: 128
+  make_pale_oak_shelves:
+    production_time: 4s
+    name: Make Pale Oak Shelves
+    type: PRODUCTION
+    input:
+      chest:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: PALE_OAK_LOG
+        amount: 24
+    output:
+      sign:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: PALE_OAK_SHELF
+        amount: 128
   make_pale_oak_trapdoors:
     production_time: 4s
     name: Make Trap Doors
@@ -8479,6 +8760,22 @@ recipes:
         ==: org.bukkit.inventory.ItemStack
         type: CRIMSON_HANGING_SIGN
         amount: 128
+  make_crimson_shelves:
+    production_time: 4s
+    name: Make Crimson Shelves
+    type: PRODUCTION
+    input:
+      chest:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: CRIMSON_STEM
+        amount: 24
+    output:
+      sign:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: CRIMSON_SHELF
+        amount: 128
   make_crimson_trapdoors:
     production_time: 4s
     name: Make Trap Doors
@@ -8579,6 +8876,22 @@ recipes:
         v: 3839
         ==: org.bukkit.inventory.ItemStack
         type: WARPED_HANGING_SIGN
+        amount: 128
+  make_warped_shelves:
+    production_time: 4s
+    name: Make Warped Shelves
+    type: PRODUCTION
+    input:
+      chest:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: WARPED_STEM
+        amount: 24
+    output:
+      sign:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: WARPED_SHELF
         amount: 128
   make_warped_trapdoors:
     production_time: 4s
@@ -11798,7 +12111,7 @@ recipes:
           lore:
             - A bundle of mob drops
             - Used in the elite cauldron
-      food bundle:
+      hot bundle:
         v: 3839
         ==: org.bukkit.inventory.ItemStack
         type: COMPOSTER
@@ -11806,11 +12119,11 @@ recipes:
         meta:
           ==: ItemMeta
           meta-type: UNSPECIFIC
-          display-name: Food Bundle
+          display-name: Hot Biome Bundle
           lore:
-            - A bundle of food crops
+            - A bundle of hot biome resources
             - Used in the elite cauldron
-      plant bundle:
+      cold bundle:
         v: 3839
         ==: org.bukkit.inventory.ItemStack
         type: COMPOSTER
@@ -11818,21 +12131,33 @@ recipes:
         meta:
           ==: ItemMeta
           meta-type: UNSPECIFIC
-          display-name: Plant Bundle
+          display-name: Cold Biome Bundle
           lore:
-            - A bundle of various plants
+            - A bundle of cold biome resources
             - Used in the elite cauldron
-      sapling bundle:
+      temperate bundle:
         v: 3839
         ==: org.bukkit.inventory.ItemStack
         type: COMPOSTER
-        amount: 4
+        amount: 8
         meta:
           ==: ItemMeta
           meta-type: UNSPECIFIC
-          display-name: Sapling Bundle
+          display-name: Temperate Biome Bundle
           lore:
-            - A bundle of various saplings
+            - A bundle of temperate biome resources
+            - Used in the elite cauldron
+      humid bundle:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: COMPOSTER
+        amount: 8
+        meta:
+          ==: ItemMeta
+          meta-type: UNSPECIFIC
+          display-name: Humid Biome Bundle
+          lore:
+            - A bundle of humid biome resources
             - Used in the elite cauldron
       nether bundle:
         v: 3839
@@ -11974,7 +12299,7 @@ recipes:
           lore:
             - A bundle of mob drops
             - Used in the elite cauldron
-      food bundle:
+      hot bundle:
         v: 3839
         ==: org.bukkit.inventory.ItemStack
         type: COMPOSTER
@@ -11982,11 +12307,11 @@ recipes:
         meta:
           ==: ItemMeta
           meta-type: UNSPECIFIC
-          display-name: Food Bundle
+          display-name: Hot Biome Bundle
           lore:
-            - A bundle of food crops
+            - A bundle of hot biome resources
             - Used in the elite cauldron
-      plant bundle:
+      cold bundle:
         v: 3839
         ==: org.bukkit.inventory.ItemStack
         type: COMPOSTER
@@ -11994,21 +12319,33 @@ recipes:
         meta:
           ==: ItemMeta
           meta-type: UNSPECIFIC
-          display-name: Plant Bundle
+          display-name: Cold Biome Bundle
           lore:
-            - A bundle of various plants
+            - A bundle of cold biome resources
             - Used in the elite cauldron
-      sapling bundle:
+      temperate bundle:
         v: 3839
         ==: org.bukkit.inventory.ItemStack
         type: COMPOSTER
-        amount: 4
+        amount: 8
         meta:
           ==: ItemMeta
           meta-type: UNSPECIFIC
-          display-name: Sapling Bundle
+          display-name: Temperate Biome Bundle
           lore:
-            - A bundle of various saplings
+            - A bundle of temperate biome resources
+            - Used in the elite cauldron
+      humid bundle:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: COMPOSTER
+        amount: 8
+        meta:
+          ==: ItemMeta
+          meta-type: UNSPECIFIC
+          display-name: Humid Biome Bundle
+          lore:
+            - A bundle of humid biome resources
             - Used in the elite cauldron
       nether bundle:
         v: 3839
@@ -12045,22 +12382,12 @@ recipes:
           display-name: Player Essence
           lore:
             - Activity reward used to fuel pearls
-      glass_bottle:
-        v: 3839
-        ==: org.bukkit.inventory.ItemStack
-        type: GLASS_BOTTLE
-        amount: 512
-        meta:
-          meta-type: UNSPECIFIC
-          ==: ItemMeta
-          lore:
-            - Compacted Item
     output:
       exp:
         v: 3839
         ==: org.bukkit.inventory.ItemStack
         type: EMERALD_BLOCK
-        amount: 10
+        amount: 12
         meta:
           meta-type: UNSPECIFIC
           ==: ItemMeta
@@ -12263,104 +12590,16 @@ recipes:
           lore:
             - A bundle of mob drops
             - Used in the elite cauldron
-  make_food_bundle:
+  make_hot_bundle:
     production_time: 8s
-    name: Make Food Bundle
+    name: Make Hot Biome Bundle
     type: PRODUCTION
     input:
-      wheat:
-        v: 3839
-        ==: org.bukkit.inventory.ItemStack
-        type: WHEAT
-        amount: 32
-        meta:
-          meta-type: UNSPECIFIC
-          ==: ItemMeta
-          lore:
-            - Compacted Item
-      carrot:
-        v: 3839
-        ==: org.bukkit.inventory.ItemStack
-        type: CARROT
-        amount: 48
-        meta:
-          meta-type: UNSPECIFIC
-          ==: ItemMeta
-          lore:
-            - Compacted Item
-      potato:
-        v: 3839
-        ==: org.bukkit.inventory.ItemStack
-        type: POTATO
-        amount: 48
-        meta:
-          meta-type: UNSPECIFIC
-          ==: ItemMeta
-          lore:
-            - Compacted Item
-      beetroot:
-        v: 3839
-        ==: org.bukkit.inventory.ItemStack
-        type: BEETROOT
-        amount: 16
-        meta:
-          meta-type: UNSPECIFIC
-          ==: ItemMeta
-          lore:
-            - Compacted Item
       melon:
         v: 3839
         ==: org.bukkit.inventory.ItemStack
         type: MELON
-        amount: 32
-        meta:
-          meta-type: UNSPECIFIC
-          ==: ItemMeta
-          lore:
-            - Compacted Item
-      sweet_berries:
-        v: 3839
-        ==: org.bukkit.inventory.ItemStack
-        type: SWEET_BERRIES
-        amount: 16
-        meta:
-          meta-type: UNSPECIFIC
-          ==: ItemMeta
-          lore:
-            - Compacted Item
-    output:
-      food bundle:
-        v: 3839
-        ==: org.bukkit.inventory.ItemStack
-        type: COMPOSTER
-        amount: 1
-        meta:
-          ==: ItemMeta
-          meta-type: UNSPECIFIC
-          display-name: Food Bundle
-          lore:
-            - A bundle of food crops
-            - Used in the elite cauldron
-  make_plant_bundle:
-    production_time: 8s
-    name: Make Plant Bundle
-    type: PRODUCTION
-    input:
-      red_mushroom:
-        v: 3839
-        ==: org.bukkit.inventory.ItemStack
-        type: RED_MUSHROOM
-        amount: 4
-        meta:
-          meta-type: UNSPECIFIC
-          ==: ItemMeta
-          lore:
-            - Compacted Item
-      brown_mushroom:
-        v: 3839
-        ==: org.bukkit.inventory.ItemStack
-        type: BROWN_MUSHROOM
-        amount: 4
+        amount: 256
         meta:
           meta-type: UNSPECIFIC
           ==: ItemMeta
@@ -12370,57 +12609,7 @@ recipes:
         v: 3839
         ==: org.bukkit.inventory.ItemStack
         type: KELP
-        amount: 16
-        meta:
-          meta-type: UNSPECIFIC
-          ==: ItemMeta
-          lore:
-            - Compacted Item
-      bamboo:
-        v: 3839
-        ==: org.bukkit.inventory.ItemStack
-        type: BAMBOO
-        amount: 16
-        meta:
-          meta-type: UNSPECIFIC
-          ==: ItemMeta
-          lore:
-            - Compacted Item
-      vine:
-        v: 3839
-        ==: org.bukkit.inventory.ItemStack
-        type: VINE
-        amount: 16
-        meta:
-          meta-type: UNSPECIFIC
-          ==: ItemMeta
-          lore:
-            - Compacted Item
-      cocoa_beans:
-        v: 3839
-        ==: org.bukkit.inventory.ItemStack
-        type: COCOA_BEANS
-        amount: 32
-        meta:
-          meta-type: UNSPECIFIC
-          ==: ItemMeta
-          lore:
-            - Compacted Item
-      pumpkin:
-        v: 3839
-        ==: org.bukkit.inventory.ItemStack
-        type: PUMPKIN
-        amount: 16
-        meta:
-          meta-type: UNSPECIFIC
-          ==: ItemMeta
-          lore:
-            - Compacted Item
-      sugar_cane:
-        v: 3839
-        ==: org.bukkit.inventory.ItemStack
-        type: SUGAR_CANE
-        amount: 32
+        amount: 128
         meta:
           meta-type: UNSPECIFIC
           ==: ItemMeta
@@ -12430,45 +12619,75 @@ recipes:
         v: 3839
         ==: org.bukkit.inventory.ItemStack
         type: CACTUS
-        amount: 48
+        amount: 384
+        meta:
+          meta-type: UNSPECIFIC
+          ==: ItemMeta
+          lore:
+            - Compacted Item
+      glass_bottle:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: GLASS_BOTTLE
+        amount: 512
         meta:
           meta-type: UNSPECIFIC
           ==: ItemMeta
           lore:
             - Compacted Item
     output:
-      plant bundle:
+      hot bundle:
         v: 3839
         ==: org.bukkit.inventory.ItemStack
         type: COMPOSTER
-        amount: 1
+        amount: 8
         meta:
           ==: ItemMeta
           meta-type: UNSPECIFIC
-          display-name: Plant Bundle
+          display-name: Hot Biome Bundle
           lore:
-            - A bundle of various plants
+            - A bundle of hot biome resources
             - Used in the elite cauldron
-  make_sapling_bundle:
+  make_cold_bundle:
     production_time: 8s
-    name: Make Sapling Bundle
+    name: Make Cold Biome Bundle
     type: PRODUCTION
     input:
-      oak_sapling:
+      potato:
         v: 3839
         ==: org.bukkit.inventory.ItemStack
-        type: OAK_SAPLING
-        amount: 8
+        type: POTATO
+        amount: 384
         meta:
           meta-type: UNSPECIFIC
           ==: ItemMeta
           lore:
             - Compacted Item
-      birch_sapling:
+      beetroot:
         v: 3839
         ==: org.bukkit.inventory.ItemStack
-        type: BIRCH_SAPLING
-        amount: 8
+        type: BEETROOT
+        amount: 128
+        meta:
+          meta-type: UNSPECIFIC
+          ==: ItemMeta
+          lore:
+            - Compacted Item
+      sweet_berries:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: SWEET_BERRIES
+        amount: 128
+        meta:
+          meta-type: UNSPECIFIC
+          ==: ItemMeta
+          lore:
+            - Compacted Item
+      pumpkin:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: PUMPKIN
+        amount: 128
         meta:
           meta-type: UNSPECIFIC
           ==: ItemMeta
@@ -12478,7 +12697,143 @@ recipes:
         v: 3839
         ==: org.bukkit.inventory.ItemStack
         type: SPRUCE_SAPLING
-        amount: 4
+        amount: 16
+        meta:
+          meta-type: UNSPECIFIC
+          ==: ItemMeta
+          lore:
+            - Compacted Item
+    output:
+      cold bundle:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: COMPOSTER
+        amount: 8
+        meta:
+          ==: ItemMeta
+          meta-type: UNSPECIFIC
+          display-name: Cold Biome Bundle
+          lore:
+            - A bundle of cold biome resources
+            - Used in the elite cauldron
+  make_temperate_bundle:
+    production_time: 8s
+    name: Make Temperate Biome Bundle
+    type: PRODUCTION
+    input:
+      wheat:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: WHEAT
+        amount: 256
+        meta:
+          meta-type: UNSPECIFIC
+          ==: ItemMeta
+          lore:
+            - Compacted Item
+      carrot:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: CARROT
+        amount: 384
+        meta:
+          meta-type: UNSPECIFIC
+          ==: ItemMeta
+          lore:
+            - Compacted Item
+      vine:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: VINE
+        amount: 128
+        meta:
+          meta-type: UNSPECIFIC
+          ==: ItemMeta
+          lore:
+            - Compacted Item
+      oak_sapling:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: OAK_SAPLING
+        amount: 32
+        meta:
+          meta-type: UNSPECIFIC
+          ==: ItemMeta
+          lore:
+            - Compacted Item
+      birch_sapling:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: BIRCH_SAPLING
+        amount: 32
+        meta:
+          meta-type: UNSPECIFIC
+          ==: ItemMeta
+          lore:
+            - Compacted Item
+    output:
+      temperate bundle:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: COMPOSTER
+        amount: 8
+        meta:
+          ==: ItemMeta
+          meta-type: UNSPECIFIC
+          display-name: Temperate Biome Bundle
+          lore:
+            - A bundle of temperate biome resources
+            - Used in the elite cauldron
+  make_humid_bundle:
+    production_time: 8s
+    name: Make Humid Biome Bundle
+    type: PRODUCTION
+    input:
+      red_mushroom:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: RED_MUSHROOM
+        amount: 32
+        meta:
+          meta-type: UNSPECIFIC
+          ==: ItemMeta
+          lore:
+            - Compacted Item
+      brown_mushroom:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: BROWN_MUSHROOM
+        amount: 32
+        meta:
+          meta-type: UNSPECIFIC
+          ==: ItemMeta
+          lore:
+            - Compacted Item
+      bamboo:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: BAMBOO
+        amount: 128
+        meta:
+          meta-type: UNSPECIFIC
+          ==: ItemMeta
+          lore:
+            - Compacted Item
+      cocoa_beans:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: COCOA_BEANS
+        amount: 256
+        meta:
+          meta-type: UNSPECIFIC
+          ==: ItemMeta
+          lore:
+            - Compacted Item
+      sugar_cane:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: SUGAR_CANE
+        amount: 256
         meta:
           meta-type: UNSPECIFIC
           ==: ItemMeta
@@ -12488,24 +12843,24 @@ recipes:
         v: 3839
         ==: org.bukkit.inventory.ItemStack
         type: JUNGLE_SAPLING
-        amount: 4
+        amount: 16
         meta:
           meta-type: UNSPECIFIC
           ==: ItemMeta
           lore:
             - Compacted Item
     output:
-      sapling bundle:
+      humid bundle:
         v: 3839
         ==: org.bukkit.inventory.ItemStack
         type: COMPOSTER
-        amount: 1
+        amount: 8
         meta:
           ==: ItemMeta
           meta-type: UNSPECIFIC
-          display-name: Sapling Bundle
+          display-name: Humid Biome Bundle
           lore:
-            - A bundle of various saplings
+            - A bundle of humid biome resources
             - Used in the elite cauldron
   make_nether_bundle:
     production_time: 8s
@@ -12631,7 +12986,7 @@ recipes:
         v: 3839
         ==: org.bukkit.inventory.ItemStack
         type: PALE_OAK_SAPLING
-        amount: 16
+        amount: 8
         meta:
           meta-type: UNSPECIFIC
           ==: ItemMeta
@@ -19757,6 +20112,35 @@ recipes:
         ==: org.bukkit.inventory.ItemStack
         type: GLOWSTONE_DUST
         amount: 128
+    output:
+      rocket_fuel:
+        custom-key: rocket_fuel
+        amount: 8
+  advanced_refine_crude_oil:
+    production_time: 64s
+    fuel_consumption_intervall: 16s
+    name: Refine Crude Oil
+    type: PRODUCTION
+    input:
+      crude_oil:
+        custom-key: crude_oil
+        amount: 64
+      glowstone_dust:
+        v: 3839
+        ==: org.bukkit.inventory.ItemStack
+        type: GLOWSTONE_DUST
+        amount: 48
+      salt:
+        ==: org.bukkit.inventory.ItemStack
+        v: 3839
+        type: SUGAR
+        amount: 16
+        meta:
+          ==: ItemMeta
+          meta-type: UNSPECIFIC
+          display-name: Salt
+          lore:
+            - Gathered from the Zorweth salt flats
     output:
       rocket_fuel:
         custom-key: rocket_fuel
