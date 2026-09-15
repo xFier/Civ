@@ -1,0 +1,16 @@
+database:
+  user: root
+  password: root
+  host: localhost
+  port: 3306
+  database: database
+  pool-size: 5
+  connection-timeout: 10000
+  idle-timeout: 600000
+  max-lifetime: 7200000
+
+holding-server: "pvp"
+failure-message: "Unable to verify your rocket transfer. Please reconnect and try again."
+main-server: main
+zorweth-server: zorweth
+default-server: main
