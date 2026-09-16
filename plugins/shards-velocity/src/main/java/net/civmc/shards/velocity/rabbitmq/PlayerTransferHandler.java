@@ -16,6 +16,7 @@ import net.civmc.shards.api.ShardServerId;
 import net.civmc.shards.api.ShardsRabbitMqTopology;
 import net.civmc.shards.api.TransferStatus;
 import net.civmc.shards.velocity.placement.ShardPlacementService;
+import net.civmc.shards.velocity.playerdata.InFlightTransfers;
 import net.civmc.shards.velocity.playerdata.PlayerDataService;
 import net.civmc.shards.velocity.playerdata.SaveResult;
 import org.slf4j.Logger;
@@ -37,14 +38,17 @@ public final class PlayerTransferHandler implements RequestHandler<PlayerTransfe
 
     private final PlayerDataService playerDataService;
     private final ShardPlacementService placementService;
+    private final InFlightTransfers inFlightTransfers;
     private final ProxyServer proxyServer;
     private final Logger logger;
 
     public PlayerTransferHandler(final PlayerDataService playerDataService,
-                                 final ShardPlacementService placementService, final ProxyServer proxyServer,
+                                 final ShardPlacementService placementService,
+                                 final InFlightTransfers inFlightTransfers, final ProxyServer proxyServer,
                                  final Logger logger) {
         this.playerDataService = playerDataService;
         this.placementService = placementService;
+        this.inFlightTransfers = inFlightTransfers;
         this.proxyServer = proxyServer;
         this.logger = logger;
     }
@@ -123,6 +127,9 @@ public final class PlayerTransferHandler implements RequestHandler<PlayerTransfe
         // is a request this same consumer has to answer - so blocking here until the connect finishes
         // is waiting for a message that cannot be delivered until we stop waiting
         final long savedAt = System.nanoTime();
+        // Recorded before the connect, so it is already there when the destination's pre-login asks.
+        // The claim happens inside the connect, and a record written afterwards would arrive too late
+        this.inFlightTransfers.started(request.playerUuid());
         beginConnect(request, player.get(), target.get(), destination.get());
         this.logger.info("Handed {} to {}: saved and released in {}ms", request.playerUuid(), destination.get(),
             (savedAt - receivedAt) / 1_000_000L);

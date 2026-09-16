@@ -14,6 +14,7 @@ import net.civmc.shards.api.snapshot.PotionEffectSnapshot;
 import net.civmc.shards.api.snapshot.VehicleSnapshot;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
+import org.bukkit.GameRules;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -271,12 +272,37 @@ public final class PlayerSnapshots {
         return awarded;
     }
 
+    /**
+     * Puts back every advancement the player had, without telling the server about it again.
+     *
+     * <p>The first time someone reaches a given shard, its own copy of their playerdata is empty, so
+     * every advancement they have ever earned is awarded here in one go. Left alone that announces
+     * each of them to everybody online - a screenful of "has made the advancement" for a player who
+     * walked ten blocks. The gamerule is turned off around the restore and put back exactly as it
+     * was, which is safe because this all happens within one tick and nothing else can earn an
+     * advancement in between.</p>
+     *
+     * <p><strong>The toasts cannot be suppressed.</strong> Awarding a criterion sends the client the
+     * advancement packet that drives them, and there is no public API to grant one quietly. So a
+     * player's first arrival on a shard still shows them their own advancement history as a stack of
+     * popups. Fixing that properly needs NMS, which this plugin deliberately does not use; the cost
+     * is bounded, since it happens once per player per shard and never again.</p>
+     */
     private static void restoreAdvancements(final Player player, final PlayerSnapshot snapshot) {
-        Bukkit.advancementIterator().forEachRemaining(advancement -> {
-            final List<String> wanted =
-                snapshot.advancementCriteria().getOrDefault(advancement.getKey().toString(), List.of());
-            applyAdvancement(player, advancement, wanted);
-        });
+        final World world = player.getWorld();
+        final Boolean announced = world.getGameRuleValue(GameRules.SHOW_ADVANCEMENT_MESSAGES);
+        world.setGameRule(GameRules.SHOW_ADVANCEMENT_MESSAGES, false);
+        try {
+            Bukkit.advancementIterator().forEachRemaining(advancement -> {
+                final List<String> wanted =
+                    snapshot.advancementCriteria().getOrDefault(advancement.getKey().toString(), List.of());
+                applyAdvancement(player, advancement, wanted);
+            });
+        } finally {
+            // Put back whatever it was, including when the restore threw. Leaving it off would
+            // silence advancements for everyone on this shard from then on
+            world.setGameRule(GameRules.SHOW_ADVANCEMENT_MESSAGES, announced == null || announced);
+        }
     }
 
     private static void applyAdvancement(final Player player, final Advancement advancement,
@@ -412,11 +438,16 @@ public final class PlayerSnapshots {
                 wanted.add(key);
             }
         }
-        final List<NamespacedKey> toUndiscover = new ArrayList<>(player.getDiscoveredRecipes());
+        final List<NamespacedKey> known = new ArrayList<>(player.getDiscoveredRecipes());
+        final List<NamespacedKey> toUndiscover = new ArrayList<>(known);
         toUndiscover.removeAll(wanted);
         if (!toUndiscover.isEmpty()) {
             player.undiscoverRecipes(toUndiscover);
         }
+        // Only the ones they do not already have. Handing the whole list over works, but the recipe
+        // book treats each as newly unlocked, so a player crossing back and forth would be shown the
+        // same stack of recipe popups every time
+        wanted.removeAll(known);
         if (!wanted.isEmpty()) {
             player.discoverRecipes(wanted);
         }

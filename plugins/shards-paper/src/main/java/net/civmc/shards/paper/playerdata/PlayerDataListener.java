@@ -3,6 +3,7 @@ package net.civmc.shards.paper.playerdata;
 import io.papermc.paper.event.player.AsyncPlayerSpawnLocationEvent;
 import java.util.Base64;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
@@ -16,6 +17,7 @@ import net.civmc.shards.api.PlayerClaimResponse;
 import net.civmc.shards.api.PlayerLocation;
 import net.civmc.shards.api.snapshot.PlayerSnapshot;
 import net.civmc.shards.api.snapshot.PlayerSnapshotCodec;
+import net.civmc.shards.paper.border.ArrivalCue;
 import net.civmc.shards.paper.border.TransferService;
 import net.civmc.shards.paper.rabbitmq.ShardsClient;
 import net.civmc.shards.paper.snapshot.PlayerSnapshots;
@@ -68,10 +70,15 @@ public final class PlayerDataListener implements Listener {
     private final OwnedPlayers owned;
     private final TransferService transfers;
     private final BooleanSupplier startupComplete;
+    private final ArrivalCue arrivalCue;
+    // Told to us by the proxy, which is the only side that can tell a crossing from a login: both
+    // claim a lock and restore a snapshot, and from here they are identical
+    private final Set<UUID> arriving = ConcurrentHashMap.newKeySet();
 
     public PlayerDataListener(final JavaPlugin plugin, final ShardsClient client, final String serverName,
                               final String failureMessage, final OwnedPlayers owned,
-                              final TransferService transfers, final BooleanSupplier startupComplete) {
+                              final TransferService transfers, final BooleanSupplier startupComplete,
+                              final ArrivalCue arrivalCue) {
         this.plugin = plugin;
         this.client = client;
         this.logger = plugin.getLogger();
@@ -80,6 +87,7 @@ public final class PlayerDataListener implements Listener {
         this.owned = owned;
         this.transfers = transfers;
         this.startupComplete = startupComplete;
+        this.arrivalCue = arrivalCue;
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
@@ -122,6 +130,9 @@ public final class PlayerDataListener implements Listener {
                 }
                 if (response.location() != null) {
                     this.pendingLocations.put(playerUuid, response.location());
+                }
+                if (response.arriving()) {
+                    this.arriving.add(playerUuid);
                 }
                 take(playerUuid);
             }
@@ -169,6 +180,7 @@ public final class PlayerDataListener implements Listener {
         final UUID playerUuid = player.getUniqueId();
         cancelJoinTimeout(playerUuid);
         reportLoginTiming(playerUuid);
+        final boolean crossedIn = this.arriving.remove(playerUuid);
         final PlayerSnapshot snapshot = this.pendingSnapshots.remove(playerUuid);
         if (snapshot == null) {
             return;
@@ -185,6 +197,12 @@ public final class PlayerDataListener implements Listener {
                     PlayerSnapshots.restoreMotion(player, snapshot);
                 }
             });
+            // Only for a crossing. A login already looks like a login, and saying "you have arrived"
+            // to someone who simply connected would be telling them about a shard boundary they did
+            // not cross
+            if (crossedIn) {
+                this.arrivalCue.show(player);
+            }
         } catch (final RuntimeException exception) {
             // Their stored state is on the proxy and was not consumed by a failed restore, so kicking
             // leaves it recoverable. Letting them play on half-restored state would not
@@ -245,6 +263,7 @@ public final class PlayerDataListener implements Listener {
         }
         this.pendingSnapshots.remove(playerUuid);
         this.pendingLocations.remove(playerUuid);
+        this.arriving.remove(playerUuid);
         this.preLoginDoneAt.remove(playerUuid);
         this.spawnLocationAt.remove(playerUuid);
         this.owned.releaseWithoutSaving(playerUuid);
