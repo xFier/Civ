@@ -10,6 +10,7 @@ import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.ProxyServer;
 import java.nio.file.Path;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import net.civmc.shards.api.ShardServerId;
@@ -17,7 +18,11 @@ import net.civmc.shards.velocity.config.ShardsConfig;
 import net.civmc.shards.velocity.placement.ShardConnectionListener;
 import net.civmc.shards.velocity.placement.ShardPlacementService;
 import net.civmc.shards.velocity.playerdata.PlayerDataService;
-import net.civmc.shards.velocity.rabbitmq.ServerStartupConsumer;
+import net.civmc.shards.velocity.rabbitmq.PlayerClaimHandler;
+import net.civmc.shards.velocity.rabbitmq.PlayerReleaseHandler;
+import net.civmc.shards.velocity.rabbitmq.PlayerSaveHandler;
+import net.civmc.shards.velocity.rabbitmq.ServerStartupHandler;
+import net.civmc.shards.velocity.rabbitmq.ShardsRequestConsumer;
 import org.slf4j.Logger;
 
 @Plugin(id = "shards", name = "Shards", version = "1.0.0", authors = {"Fier"})
@@ -29,7 +34,7 @@ public final class ShardsVelocityPlugin {
     private final Injector injector;
     private ShardPlacementService shardPlacementService;
     private PlayerDataService playerDataService;
-    private ServerStartupConsumer serverStartupConsumer;
+    private ShardsRequestConsumer requestConsumer;
 
     @Inject
     public ShardsVelocityPlugin(final ProxyServer proxyServer, final Logger logger,
@@ -53,18 +58,23 @@ public final class ShardsVelocityPlugin {
         this.shardPlacementService = shardsInjector.getInstance(ShardPlacementService.class);
         this.playerDataService = shardsInjector.getInstance(PlayerDataService.class);
 
-        this.serverStartupConsumer = new ServerStartupConsumer(shardsConfig.rabbitmq().connectionFactory(),
-            this.playerDataService, this.proxyServer, this, this.logger);
-        if (!this.serverStartupConsumer.start()) {
-            this.logger.warn("Shards could not start its server startup consumer; stale locks will not be cleared");
+        this.requestConsumer = new ShardsRequestConsumer(shardsConfig.rabbitmq().connectionFactory(),
+            List.of(
+                new ServerStartupHandler(this.playerDataService, this.logger),
+                new PlayerClaimHandler(this.playerDataService, this.logger),
+                new PlayerSaveHandler(this.playerDataService, this.logger),
+                new PlayerReleaseHandler(this.playerDataService, this.logger)),
+            this.proxyServer, this, this.logger);
+        if (!this.requestConsumer.start()) {
+            this.logger.warn("Shards could not start its request consumer; no server can reach its player data");
         }
     }
 
     @Subscribe
     public void onProxyShutdown(final ProxyShutdownEvent event) {
         // The database pool closes itself through the hook DatabaseModule registers when it opens it
-        if (this.serverStartupConsumer != null) {
-            this.serverStartupConsumer.close();
+        if (this.requestConsumer != null) {
+            this.requestConsumer.close();
         }
     }
 

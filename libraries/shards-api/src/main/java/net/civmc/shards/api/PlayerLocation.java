@@ -1,4 +1,4 @@
-package net.civmc.shards.velocity.playerdata;
+package net.civmc.shards.api;
 
 /**
  * Where a player was when their data was last written back.

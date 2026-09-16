@@ -1,5 +1,6 @@
 package net.civmc.shards.velocity.playerdata;
 
+import net.civmc.shards.api.PlayerLocation;
 import java.util.UUID;
 
 /**

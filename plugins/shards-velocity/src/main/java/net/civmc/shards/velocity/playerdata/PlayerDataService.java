@@ -1,5 +1,6 @@
 package net.civmc.shards.velocity.playerdata;
 
+import net.civmc.shards.api.PlayerLocation;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import java.sql.SQLException;
@@ -125,6 +126,17 @@ public final class PlayerDataService {
     public int releaseAllForServer(final UUID serverUuid) {
         return this.jdbi.withExtension(PlayerDataStatements.class,
             statements -> statements.releaseAllForServer(serverUuid));
+    }
+
+    /**
+     * Gives up one player's lock without writing anything back, and only if {@code serverUuid} holds
+     * it. For ownership taken at pre-login for a player who then never arrived.
+     *
+     * @return whether a lock held by that server was actually dropped
+     */
+    public boolean release(final UUID playerUuid, final UUID serverUuid) {
+        return this.jdbi.withExtension(PlayerDataStatements.class,
+            statements -> statements.release(playerUuid, serverUuid) > 0);
     }
 
     private static boolean isDuplicateKey(final UnableToExecuteStatementException exception) {

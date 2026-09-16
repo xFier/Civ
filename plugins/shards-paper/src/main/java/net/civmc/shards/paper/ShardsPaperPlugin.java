@@ -1,17 +1,26 @@
 package net.civmc.shards.paper;
 
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import net.civmc.shards.api.ServerStartupRequest;
 import net.civmc.shards.api.ServerStartupResponse;
 import net.civmc.shards.paper.config.ShardsPaperConfig;
+import net.civmc.shards.paper.playerdata.OwnedPlayers;
+import net.civmc.shards.paper.playerdata.PlayerDataListener;
 import net.civmc.shards.paper.rabbitmq.ShardsClient;
 import net.civmc.shards.paper.snapshot.SnapshotVerifyCommand;
+import net.kyori.adventure.text.Component;
+import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class ShardsPaperPlugin extends JavaPlugin {
 
+    private static final long SHUTDOWN_DRAIN_SECONDS = 20L;
+
     private ShardsPaperConfig config;
     private ShardsClient client;
+    private OwnedPlayers owned;
 
     @Override
     public void onEnable() {
@@ -26,12 +35,25 @@ public final class ShardsPaperPlugin extends JavaPlugin {
 
         this.client = new ShardsClient(this.config.connectionFactory(), this, getLogger(), this::releaseStaleLocks);
         this.client.start();
+        this.owned = new OwnedPlayers(this.client, getLogger(), this.config.serverName());
 
+        getServer().getPluginManager().registerEvents(
+            new PlayerDataListener(this, this.client, this.config.serverName(), this.config.failureMessage(),
+                this.owned), this);
         getCommand("shardsnapshot").setExecutor(new SnapshotVerifyCommand());
     }
 
     @Override
     public void onDisable() {
+        // Kick first, so every quit handler runs and every save is sent while the plugin is still able
+        // to send it. A player still online when the client closes has their data left owned by a
+        // server that is about to stop existing
+        for (final Player player : Bukkit.getOnlinePlayers()) {
+            player.kick(Component.text("Server is shutting down"));
+        }
+        if (this.owned != null) {
+            this.owned.drain(SHUTDOWN_DRAIN_SECONDS, TimeUnit.SECONDS);
+        }
         if (this.client != null) {
             this.client.close();
         }
@@ -44,7 +66,7 @@ public final class ShardsPaperPlugin extends JavaPlugin {
      * locks of the players currently being served.
      */
     private void releaseStaleLocks() {
-        this.client.send(ServerStartupRequest.create(this.config.serverName()))
+        this.client.startup(ServerStartupRequest.create(this.config.serverName()))
             .whenComplete(this::logStartupResult);
     }
 

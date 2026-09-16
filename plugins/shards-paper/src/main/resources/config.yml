@@ -3,6 +3,10 @@
 # know owns nothing, and a name belonging to another server owns that server's players.
 server-name: main
 
+# Shown to a player whose data could not be claimed or restored. They are refused rather than let in
+# on whatever this server happens to have on disk, because that would be someone else's stale copy.
+failure-message: "Unable to load your player data. Please reconnect and try again."
+
 # This server holds no database credentials. It reaches its player data by asking the proxy over
 # RabbitMQ, and the proxy is the only thing that reads or writes the store.
 rabbitmq:
