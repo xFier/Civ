@@ -20,6 +20,7 @@ import net.civmc.shards.velocity.placement.ShardPlacementService;
 import net.civmc.shards.velocity.playerdata.InFlightTransfers;
 import net.civmc.shards.velocity.playerdata.PlayerDataService;
 import net.civmc.shards.velocity.rabbitmq.PlayerCheckpointHandler;
+import net.civmc.shards.velocity.rabbitmq.BorderProbeHandler;
 import net.civmc.shards.velocity.rabbitmq.PlayerClaimHandler;
 import net.civmc.shards.velocity.rabbitmq.PlayerReleaseHandler;
 import net.civmc.shards.velocity.rabbitmq.PlayerSaveHandler;
@@ -72,7 +73,8 @@ public final class ShardsVelocityPlugin {
                 new PlayerCheckpointHandler(this.playerDataService, this.logger),
                 new PlayerReleaseHandler(this.playerDataService, this.logger),
                 new PlayerTransferHandler(this.playerDataService, this.shardPlacementService,
-                    inFlightTransfers, this.proxyServer, this.logger)),
+                    inFlightTransfers, this.proxyServer, this.logger),
+                new BorderProbeHandler(this.shardPlacementService, this.proxyServer, this.logger)),
             this.proxyServer, this, this.logger);
         if (!this.requestConsumer.start()) {
             this.logger.warn("Shards could not start its request consumer; no server can reach its player data");

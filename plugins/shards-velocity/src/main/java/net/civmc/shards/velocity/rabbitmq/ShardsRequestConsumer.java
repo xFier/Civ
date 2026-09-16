@@ -107,7 +107,7 @@ public final class ShardsRequestConsumer implements AutoCloseable {
         channel.addReturnListener(returned -> this.logger.error(
             "A reply to {} could not be delivered: {}. The sender will time out",
             returned.getRoutingKey(), returned.getReplyText()));
-        channel.queueDeclare(handler.queue(), ShardsRabbitMqTopology.PLAYER_QUEUE_DURABLE, false, false, null);
+        channel.queueDeclare(handler.queue(), handler.durable(), false, false, null);
         final DeliverCallback deliverCallback = (consumerTag, delivery) -> handleDelivery(
             handler, channel, delivery.getBody(), delivery.getProperties(), delivery.getEnvelope().getDeliveryTag());
         channel.basicConsume(handler.queue(), false, deliverCallback, consumerTag -> {

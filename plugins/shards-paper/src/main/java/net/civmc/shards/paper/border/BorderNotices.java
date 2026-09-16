@@ -29,6 +29,10 @@ public final class BorderNotices {
 
     private static final Component APPROACHING =
         Component.text("You are approaching the edge of this shard", NamedTextColor.GRAY);
+    private static final Component EDGE_OF_THE_WORLD =
+        Component.text("The world ends ahead", NamedTextColor.GRAY);
+    private static final Component BEYOND_IS_CLOSED =
+        Component.text("The land ahead is not reachable right now", NamedTextColor.RED);
     private static final Component NOWHERE_BEYOND =
         Component.text("The world ends here", NamedTextColor.GRAY);
     private static final Component NOT_ANSWERING =
@@ -37,6 +41,26 @@ public final class BorderNotices {
         Component.text("Your data could not be written back, so you cannot cross yet", NamedTextColor.RED);
 
     private final Map<UUID, Long> lastApproachAt = new ConcurrentHashMap<>();
+
+    /**
+     * What to say to someone walking towards an edge, given what is known to lie past it.
+     *
+     * <p>A null {@code beyond} is "not known yet" - the first approach to an edge, for the fraction
+     * of a second before the probe answers - and falls back to saying only that an edge is ahead.
+     * Guessing instead would mean sometimes telling a player the world ends when in truth the
+     * neighbour had simply not answered in time.</p>
+     */
+    public static Component approachMessage(final BorderOutlook.Beyond beyond) {
+        if (beyond == null) {
+            return APPROACHING;
+        }
+        return switch (beyond.status()) {
+            case CROSSABLE -> Component.text("Ahead lies ", NamedTextColor.GRAY)
+                .append(Component.text(beyond.shardName(), NamedTextColor.WHITE));
+            case UNOWNED -> EDGE_OF_THE_WORLD;
+            case UNREACHABLE, ERROR -> BEYOND_IS_CLOSED;
+        };
+    }
 
     /**
      * Said while a player is walking towards a border, repeatedly but not every step.
