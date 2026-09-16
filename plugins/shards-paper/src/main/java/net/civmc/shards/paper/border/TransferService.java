@@ -42,18 +42,21 @@ public final class TransferService {
     private final Logger logger;
     private final String serverName;
     private final Component failureMessage;
+    private final BorderNotices notices;
     private final Set<UUID> inTransit = ConcurrentHashMap.newKeySet();
     // What was taken out from under each player, so it can be put back if the handover never starts
     private final Map<UUID, VehicleSnapshot> removedVehicles = new ConcurrentHashMap<>();
 
     public TransferService(final JavaPlugin plugin, final ShardsClient client, final OwnedPlayers owned,
-                           final Logger logger, final String serverName, final String failureMessage) {
+                           final Logger logger, final String serverName, final String failureMessage,
+                           final BorderNotices notices) {
         this.plugin = plugin;
         this.client = client;
         this.owned = owned;
         this.logger = logger;
         this.serverName = serverName;
         this.failureMessage = Component.text(failureMessage);
+        this.notices = notices;
     }
 
     public boolean isInTransit(final UUID playerUuid) {
@@ -70,6 +73,7 @@ public final class TransferService {
     public void forget(final UUID playerUuid) {
         this.inTransit.remove(playerUuid);
         this.removedVehicles.remove(playerUuid);
+        this.notices.forget(playerUuid);
     }
 
     /**
@@ -204,6 +208,11 @@ public final class TransferService {
             this.owned.add(playerUuid);
             this.logger.warning("Kept " + playerUuid + " here: " + response.status() + " ("
                 + response.failureMessage() + ")");
+            if (player != null) {
+                // Otherwise the only sign is being shoved back a block, which reads as the server
+                // being broken rather than as the border doing what it is for
+                this.notices.refused(player, response.status());
+            }
             return;
         }
 
