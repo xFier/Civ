@@ -39,7 +39,8 @@ public final class ShardsPaperPlugin extends JavaPlugin {
             return;
         }
 
-        this.client = new ShardsClient(this.config.connectionFactory(), this, getLogger(), this::releaseStaleLocks);
+        this.client = new ShardsClient(this.config.connectionFactory(), this.config.serverName(), this, getLogger(),
+            this::releaseStaleLocks);
         this.client.start();
         this.owned = new OwnedPlayers(this.client, getLogger(), this.config.serverName());
 
@@ -48,7 +49,7 @@ public final class ShardsPaperPlugin extends JavaPlugin {
 
         getServer().getPluginManager().registerEvents(
             new PlayerDataListener(this, this.client, this.config.serverName(), this.config.failureMessage(),
-                this.owned), this);
+                this.owned, this.transfers), this);
         getServer().getPluginManager().registerEvents(new ShardBorderListener(this.border, this.transfers), this);
         getCommand("shardsnapshot").setExecutor(new SnapshotVerifyCommand());
     }

@@ -1,7 +1,7 @@
 package net.civmc.shards.velocity.rabbitmq;
 
-import com.velocitypowered.api.proxy.ConnectionRequestBuilder;
 import com.velocitypowered.api.proxy.Player;
+import net.kyori.adventure.text.Component;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import java.util.Base64;
@@ -59,6 +59,7 @@ public final class PlayerTransferHandler implements RequestHandler<PlayerTransfe
 
     @Override
     public PlayerTransferResponse handle(final PlayerTransferRequest request) {
+        final long receivedAt = System.nanoTime();
         final Optional<String> destination = resolveDestination(request);
         if (destination.isEmpty()) {
             // Not an error for a location: shards are allowed not to touch, so ground owned by nobody
@@ -103,7 +104,14 @@ public final class PlayerTransferHandler implements RequestHandler<PlayerTransfe
                 "Could not write player data back");
         }
 
-        return connect(request, player.get(), target.get(), destination.get());
+        // Started, not waited for. The destination claims the player during its own pre-login, which
+        // is a request this same consumer has to answer - so blocking here until the connect finishes
+        // is waiting for a message that cannot be delivered until we stop waiting
+        final long savedAt = System.nanoTime();
+        beginConnect(request, player.get(), target.get(), destination.get());
+        this.logger.info("Handed {} to {}: saved and released in {}ms", request.playerUuid(), destination.get(),
+            (savedAt - receivedAt) / 1_000_000L);
+        return PlayerTransferResponse.transferred(request.requestId(), destination.get());
     }
 
     private Optional<String> resolveDestination(final PlayerTransferRequest request) {
@@ -117,25 +125,29 @@ public final class PlayerTransferHandler implements RequestHandler<PlayerTransfe
         return this.placementService.shardFor(request.targetLocation());
     }
 
-    private PlayerTransferResponse connect(final PlayerTransferRequest request, final Player player,
-                                           final RegisteredServer target, final String destination) {
-        try {
-            final ConnectionRequestBuilder.Result result = player.createConnectionRequest(target).connect()
-                .join();
-            if (result.isSuccessful()) {
-                return PlayerTransferResponse.transferred(request.requestId(), destination);
+    /**
+     * Moves the player, without waiting to see whether it worked.
+     *
+     * <p>By this point their data is written and the lock released, so the answer to the sender is
+     * already decided: the handover happened. What is left is only where the player's screen ends up,
+     * and if that fails they are disconnected rather than left on a server that no longer owns them.
+     * Their stored location is the destination, so reconnecting puts them where they were going.</p>
+     */
+    private void beginConnect(final PlayerTransferRequest request, final Player player,
+                              final RegisteredServer target, final String destination) {
+        player.createConnectionRequest(target).connect().whenComplete((result, error) -> {
+            if (error == null && result != null && result.isSuccessful()) {
+                return;
             }
-            // The lock is already released and the payload already written, so their data is safe and
-            // sitting at the destination. Reconnecting picks it up; staying here does not
-            this.logger.error("Transfer of {} to {} was refused by the destination", request.playerUuid(),
-                destination);
-            return PlayerTransferResponse.of(request.requestId(), TransferStatus.DESTINATION_UNAVAILABLE,
-                "Destination refused the connection");
-        } catch (final RuntimeException exception) {
-            this.logger.error("Could not connect {} to {}", request.playerUuid(), destination, exception);
-            return PlayerTransferResponse.of(request.requestId(), TransferStatus.DESTINATION_UNAVAILABLE,
-                "Could not connect to the destination");
-        }
+            if (error == null) {
+                this.logger.error("Transfer of {} to {} was refused by the destination", request.playerUuid(),
+                    destination);
+            } else {
+                this.logger.error("Could not connect {} to {}", request.playerUuid(), destination, error);
+            }
+            player.disconnect(Component.text(
+                "Could not reach " + destination + ". Please reconnect - your data is safe."));
+        });
     }
 
     @Override

@@ -7,6 +7,8 @@ import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
 import com.rabbitmq.client.DeliverCallback;
+import com.rabbitmq.client.Recoverable;
+import com.rabbitmq.client.RecoveryListener;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.nio.charset.StandardCharsets;
@@ -50,6 +52,7 @@ public final class ShardsClient implements AutoCloseable {
     private static final int REPLY_TTL_MILLIS = 20_000;
 
     private final ConnectionFactory connectionFactory;
+    private final String serverName;
     private final JavaPlugin plugin;
     private final Logger logger;
     private final Runnable onFirstConnect;
@@ -65,9 +68,10 @@ public final class ShardsClient implements AutoCloseable {
      * @param onFirstConnect run once, after the first connection this client establishes. Reconnects
      *     deliberately do not run it: what it sends is only correct for a server with nobody online
      */
-    public ShardsClient(final ConnectionFactory connectionFactory, final JavaPlugin plugin, final Logger logger,
-                        final Runnable onFirstConnect) {
+    public ShardsClient(final ConnectionFactory connectionFactory, final String serverName,
+                        final JavaPlugin plugin, final Logger logger, final Runnable onFirstConnect) {
         this.connectionFactory = connectionFactory;
+        this.serverName = serverName;
         this.plugin = plugin;
         this.logger = logger;
         this.onFirstConnect = onFirstConnect;
@@ -90,11 +94,16 @@ public final class ShardsClient implements AutoCloseable {
             this.channel = this.connection.createChannel();
             final Map<String, Object> arguments = new HashMap<>();
             arguments.put("x-message-ttl", REPLY_TTL_MILLIS);
-            this.replyQueue = this.channel.queueDeclare("", false, true, true, arguments).getQueue();
+            // Named rather than left to the broker. A server-generated name changes when the client
+            // recovers the connection, and this reference to it would not - so every reply would be
+            // addressed to a queue that no longer exists, and be dropped without a word
+            this.replyQueue = ShardsRabbitMqTopology.replyQueue(this.serverName);
+            this.channel.queueDeclare(this.replyQueue, false, true, true, arguments);
             final DeliverCallback deliverCallback = (consumerTag, delivery) ->
                 handleResponse(delivery.getProperties(), delivery.getBody());
             this.channel.basicConsume(this.replyQueue, true, deliverCallback, consumerTag -> {
             });
+            watchRecovery(this.connection);
             this.ready = true;
         } catch (final ConnectException exception) {
             this.logger.warning("Retrying RabbitMQ connection");
@@ -109,6 +118,29 @@ public final class ShardsClient implements AutoCloseable {
             this.onFirstConnect.run();
         }
         return true;
+    }
+
+    /**
+     * Says so when the client loses its connection and gets it back. The recovery happens inside the
+     * driver, so without this it is silent - and a recovery that leaves something subtly broken then
+     * looks like nothing happening at all.
+     */
+    private void watchRecovery(final Connection connection) {
+        if (!(connection instanceof Recoverable recoverable)) {
+            return;
+        }
+        recoverable.addRecoveryListener(new RecoveryListener() {
+            @Override
+            public void handleRecovery(final Recoverable recovered) {
+                ShardsClient.this.logger.info("RabbitMQ connection recovered; replies resume on "
+                    + ShardsClient.this.replyQueue);
+            }
+
+            @Override
+            public void handleRecoveryStarted(final Recoverable recovered) {
+                ShardsClient.this.logger.warning("RabbitMQ connection lost, recovering");
+            }
+        });
     }
 
     public CompletableFuture<ServerStartupResponse> startup(final ServerStartupRequest request) {

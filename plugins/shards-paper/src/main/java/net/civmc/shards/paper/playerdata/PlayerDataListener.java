@@ -15,6 +15,7 @@ import net.civmc.shards.api.PlayerClaimResponse;
 import net.civmc.shards.api.PlayerLocation;
 import net.civmc.shards.api.snapshot.PlayerSnapshot;
 import net.civmc.shards.api.snapshot.PlayerSnapshotCodec;
+import net.civmc.shards.paper.border.TransferService;
 import net.civmc.shards.paper.rabbitmq.ShardsClient;
 import net.civmc.shards.paper.snapshot.PlayerSnapshots;
 import net.kyori.adventure.text.Component;
@@ -55,21 +56,29 @@ public final class PlayerDataListener implements Listener {
     private final Map<UUID, PlayerSnapshot> pendingSnapshots = new ConcurrentHashMap<>();
     private final Map<UUID, PlayerLocation> pendingLocations = new ConcurrentHashMap<>();
     private final Map<UUID, BukkitTask> joinTimeouts = new ConcurrentHashMap<>();
+    // Only for the timing line at join. Kept apart from the state above so it can be read and
+    // discarded without touching anything that matters
+    private final Map<UUID, Long> preLoginDoneAt = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> spawnLocationAt = new ConcurrentHashMap<>();
     private final OwnedPlayers owned;
+    private final TransferService transfers;
 
     public PlayerDataListener(final JavaPlugin plugin, final ShardsClient client, final String serverName,
-                              final String failureMessage, final OwnedPlayers owned) {
+                              final String failureMessage, final OwnedPlayers owned,
+                              final TransferService transfers) {
         this.plugin = plugin;
         this.client = client;
         this.logger = plugin.getLogger();
         this.serverName = serverName;
         this.failureMessage = Component.text(failureMessage);
         this.owned = owned;
+        this.transfers = transfers;
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onPreLogin(final AsyncPlayerPreLoginEvent event) {
         final UUID playerUuid = event.getUniqueId();
+        final long askedAt = System.nanoTime();
         final PlayerClaimResponse response;
         try {
             response = this.client.claim(PlayerClaimRequest.create(this.serverName, playerUuid))
@@ -82,6 +91,9 @@ public final class PlayerDataListener implements Listener {
             refuse(event, "could not reach the proxy to claim player data", exception);
             return;
         }
+
+        this.logger.info(String.format("Claim of %s answered in %dms (%s)", playerUuid,
+            elapsedMillis(askedAt), response.status()));
 
         switch (response.status()) {
             case LOADED -> {
@@ -106,11 +118,16 @@ public final class PlayerDataListener implements Listener {
             case ERROR -> refuse(event, "the proxy refused the claim: " + response.failureMessage(), null);
             default -> refuse(event, "unknown claim status " + response.status(), null);
         }
+        this.preLoginDoneAt.put(playerUuid, System.nanoTime());
     }
 
     @EventHandler
     public void onSpawnLocation(final AsyncPlayerSpawnLocationEvent event) {
         final UUID playerUuid = event.getConnection().getProfile().getId();
+        // Recorded before anything else here, and whether or not there is a location to apply: this
+        // event is the first moment after the client has finished reconfiguring, so the gap since
+        // pre-login is what that cost
+        this.spawnLocationAt.put(playerUuid, System.nanoTime());
         final PlayerLocation stored = this.pendingLocations.remove(playerUuid);
         if (stored == null) {
             return;
@@ -123,7 +140,12 @@ public final class PlayerDataListener implements Listener {
                 + "; leaving them at the default spawn");
             return;
         }
-        event.setSpawnLocation(new Location(world, stored.x(), stored.y(), stored.z()));
+        // Orientation comes from the snapshot, not the stored coordinates: arriving without it turns
+        // every border crossing into being spun round to face south
+        final PlayerSnapshot snapshot = this.pendingSnapshots.get(playerUuid);
+        final float yaw = snapshot == null ? 0.0f : snapshot.yaw();
+        final float pitch = snapshot == null ? 0.0f : snapshot.pitch();
+        event.setSpawnLocation(new Location(world, stored.x(), stored.y(), stored.z(), yaw, pitch));
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
@@ -131,12 +153,23 @@ public final class PlayerDataListener implements Listener {
         final Player player = event.getPlayer();
         final UUID playerUuid = player.getUniqueId();
         cancelJoinTimeout(playerUuid);
+        reportLoginTiming(playerUuid);
         final PlayerSnapshot snapshot = this.pendingSnapshots.remove(playerUuid);
         if (snapshot == null) {
             return;
         }
+        final long restoreStartedAt = System.nanoTime();
         try {
             PlayerSnapshots.restore(player, snapshot);
+            this.logger.info(String.format("Restored %s in %dms", playerUuid,
+                elapsedMillis(restoreStartedAt)));
+            // A tick later: the join tick sends the player their position, which discards any velocity
+            // set during it, and gliding is refused until the elytra from the restore above is on
+            Bukkit.getScheduler().runTask(this.plugin, () -> {
+                if (player.isOnline()) {
+                    PlayerSnapshots.restoreMotion(player, snapshot);
+                }
+            });
         } catch (final RuntimeException exception) {
             // Their stored state is on the proxy and was not consumed by a failed restore, so kicking
             // leaves it recoverable. Letting them play on half-restored state would not
@@ -147,7 +180,37 @@ public final class PlayerDataListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onQuit(final PlayerQuitEvent event) {
+        // Does nothing for a player handed to another shard: ownership was given up when they were
+        // handed over, and saving again here would write over what they are doing now
         this.owned.saveAndRelease(event.getPlayer());
+        this.transfers.forget(event.getPlayer().getUniqueId());
+    }
+
+    /**
+     * Where the pause between shards actually goes.
+     *
+     * <p>Pre-login to spawn location spans the client leaving play, being sent the registries and tags,
+     * rebuilding them and saying it is ready - the server is mostly idle waiting through it. Spawn
+     * location to join is this server putting the player into the world. Anything after join, such as
+     * terrain appearing, is on the client and invisible from here.</p>
+     */
+    private void reportLoginTiming(final UUID playerUuid) {
+        final Long preLogin = this.preLoginDoneAt.remove(playerUuid);
+        final Long spawnLocation = this.spawnLocationAt.remove(playerUuid);
+        if (preLogin == null || spawnLocation == null) {
+            return;
+        }
+        final long now = System.nanoTime();
+        this.logger.info(String.format(
+            "Login of %s: %dms reconfiguring the client, %dms placing them, %dms from claim to join",
+            playerUuid,
+            (spawnLocation - preLogin) / 1_000_000L,
+            (now - spawnLocation) / 1_000_000L,
+            (now - preLogin) / 1_000_000L));
+    }
+
+    private static long elapsedMillis(final long fromNanos) {
+        return (System.nanoTime() - fromNanos) / 1_000_000L;
     }
 
     private void take(final UUID playerUuid) {
@@ -167,6 +230,8 @@ public final class PlayerDataListener implements Listener {
         }
         this.pendingSnapshots.remove(playerUuid);
         this.pendingLocations.remove(playerUuid);
+        this.preLoginDoneAt.remove(playerUuid);
+        this.spawnLocationAt.remove(playerUuid);
         this.owned.releaseWithoutSaving(playerUuid);
     }
 

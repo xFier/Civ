@@ -2,6 +2,7 @@ package net.civmc.shards.paper.snapshot;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -10,6 +11,7 @@ import java.util.Map;
 import net.civmc.shards.api.snapshot.LocationSnapshot;
 import net.civmc.shards.api.snapshot.PlayerSnapshot;
 import net.civmc.shards.api.snapshot.PotionEffectSnapshot;
+import net.civmc.shards.api.snapshot.VehicleSnapshot;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -27,6 +29,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
+import org.bukkit.util.Vector;
 
 /**
  * Reads a player into a {@link PlayerSnapshot} and writes one back.
@@ -39,10 +42,35 @@ import org.bukkit.potion.PotionEffectType;
  */
 public final class PlayerSnapshots {
 
+    // Worked out once. Asking for a block statistic about a non-block throws, and letting that happen
+    // across every material costs thousands of exceptions per pass - on the main thread, during a join
+    private static final List<Material> BLOCK_MATERIALS = Arrays.stream(Material.values())
+        .filter(Material::isBlock).toList();
+    private static final List<Material> ITEM_MATERIALS = Arrays.stream(Material.values())
+        .filter(Material::isItem).toList();
+
     private PlayerSnapshots() {
     }
 
+    /**
+     * Reads a player, without whatever they are riding.
+     *
+     * <p>For an ordinary save. The vehicle stays in the world and the server persists it like any
+     * other entity, so carrying it here too would rebuild it at the next login and leave two.</p>
+     */
     public static PlayerSnapshot capture(final Player player) {
+        return capture(player, null);
+    }
+
+    /**
+     * Reads a player along with what they are riding, for a handover to another shard - where the
+     * vehicle cannot stay behind because the player is not coming back for it.
+     */
+    public static PlayerSnapshot captureForTransfer(final Player player) {
+        return capture(player, Vehicles.capture(player));
+    }
+
+    private static PlayerSnapshot capture(final Player player, final VehicleSnapshot vehicle) {
         return new PlayerSnapshot(
             PlayerSnapshot.CURRENT_VERSION,
             encode(ItemStack.serializeItemsAsBytes(player.getInventory().getContents())),
@@ -70,7 +98,17 @@ public final class PlayerSnapshots {
             captureAdvancements(player),
             captureStatistics(player),
             captureRecipes(player),
-            captureLocation(player.getRespawnLocation()));
+            captureLocation(player.getRespawnLocation()),
+            vehicle,
+            player.getLocation().getYaw(),
+            player.getLocation().getPitch(),
+            player.getVelocity().getX(),
+            player.getVelocity().getY(),
+            player.getVelocity().getZ(),
+            player.getFallDistance(),
+            player.isSprinting(),
+            player.isGliding(),
+            player.isSwimming());
     }
 
     public static void restore(final Player player, final PlayerSnapshot snapshot) {
@@ -112,6 +150,31 @@ public final class PlayerSnapshots {
         restoreStatistics(player, snapshot);
         restoreRecipes(player, snapshot);
         restoreRespawnLocation(player, snapshot);
+        // Last: the player has to exist where they are before anything can be put underneath them
+        Vehicles.restore(player, snapshot.vehicle());
+    }
+
+    /**
+     * Puts a player back into the motion they were already in.
+     *
+     * <p>Separate from {@link #restore} because it has to happen a tick later. On the tick a player
+     * joins, the server sends them their position, and that overrides anything set here - so velocity
+     * applied during the join is thrown away and they stop dead in mid-air.</p>
+     *
+     * <p>Gliding needs the same wait for a different reason: it is refused unless the player already
+     * has elytra on, which is true only once the inventory from {@link #restore} has been applied.</p>
+     */
+    public static void restoreMotion(final Player player, final PlayerSnapshot snapshot) {
+        player.setVelocity(new Vector(snapshot.velocityX(), snapshot.velocityY(), snapshot.velocityZ()));
+        // Before gliding and sprinting, which a fall can clear
+        player.setFallDistance(snapshot.fallDistance());
+        if (snapshot.gliding()) {
+            player.setGliding(true);
+        }
+        player.setSprinting(snapshot.sprinting());
+        if (snapshot.swimming()) {
+            player.setSwimming(true);
+        }
     }
 
     private static String capturePersistentData(final Player player) {
@@ -237,15 +300,9 @@ public final class PlayerSnapshots {
             switch (statistic.getType()) {
                 case UNTYPED -> putIfNonZero(statistics, statistic.name(), null, player.getStatistic(statistic));
                 case BLOCK, ITEM -> {
-                    for (final Material material : Material.values()) {
-                        // Statistics reject a material of the wrong kind, and which materials are
-                        // blocks or items is not knowable from the statistic alone
-                        try {
-                            putIfNonZero(statistics, statistic.name(), material.name(),
-                                player.getStatistic(statistic, material));
-                        } catch (final IllegalArgumentException ignored) {
-                            // not a valid pairing
-                        }
+                    for (final Material material : materialsFor(statistic)) {
+                        putIfNonZero(statistics, statistic.name(), material.name(),
+                            player.getStatistic(statistic, material));
                     }
                 }
                 case ENTITY -> {
@@ -290,8 +347,8 @@ public final class PlayerSnapshots {
             switch (statistic.getType()) {
                 case UNTYPED -> player.setStatistic(statistic, 0);
                 case BLOCK, ITEM -> {
-                    for (final Material material : Material.values()) {
-                        setQuietly(() -> player.setStatistic(statistic, material, 0));
+                    for (final Material material : materialsFor(statistic)) {
+                        player.setStatistic(statistic, material, 0);
                     }
                 }
                 case ENTITY -> {
@@ -325,6 +382,10 @@ public final class PlayerSnapshots {
                 player.setStatistic(statistic, Material.valueOf(qualifier), value);
             }
         });
+    }
+
+    private static List<Material> materialsFor(final Statistic statistic) {
+        return statistic.getType() == Statistic.Type.BLOCK ? BLOCK_MATERIALS : ITEM_MATERIALS;
     }
 
     private static void setQuietly(final Runnable action) {

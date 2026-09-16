@@ -21,6 +21,20 @@ public final class ShardsRabbitMqTopology {
     public static final String PLAYER_TRANSFER_QUEUE = "shards.playerdata.transfer";
     public static final boolean PLAYER_QUEUE_DURABLE = true;
 
+    public static final String REPLY_QUEUE_PREFIX = "shards.replies.";
+
+    /**
+     * Where a server's replies are delivered.
+     *
+     * <p>Named after the server rather than left for the broker to name. A broker-generated name
+     * changes when a client recovers its connection, and anything holding the old one addresses
+     * replies to a queue that no longer exists - which fails silently, because an unroutable message
+     * is discarded rather than refused.</p>
+     */
+    public static String replyQueue(final String serverName) {
+        return REPLY_QUEUE_PREFIX + serverName;
+    }
+
     private ShardsRabbitMqTopology() {
     }
 }
