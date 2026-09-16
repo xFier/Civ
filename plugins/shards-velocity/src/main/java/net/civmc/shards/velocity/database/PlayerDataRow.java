@@ -1,7 +1,7 @@
 package net.civmc.shards.velocity.database;
 
 import java.util.UUID;
-import net.civmc.shards.velocity.playerdata.PlayerLocation;
+import net.civmc.shards.api.PlayerLocation;
 
 /**
  * A row of {@code shard_player_data}. Every column except the primary key is nullable: a freshly

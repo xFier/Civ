@@ -15,6 +15,11 @@ public final class ShardsRabbitMqTopology {
     public static final String SERVER_STARTUP_QUEUE = "shards.server.startup";
     public static final boolean SERVER_STARTUP_QUEUE_DURABLE = true;
 
+    public static final String PLAYER_CLAIM_QUEUE = "shards.playerdata.claim";
+    public static final String PLAYER_SAVE_QUEUE = "shards.playerdata.save";
+    public static final String PLAYER_RELEASE_QUEUE = "shards.playerdata.release";
+    public static final boolean PLAYER_QUEUE_DURABLE = true;
+
     private ShardsRabbitMqTopology() {
     }
 }

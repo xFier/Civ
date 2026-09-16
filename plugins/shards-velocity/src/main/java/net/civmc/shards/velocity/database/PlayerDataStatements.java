@@ -80,4 +80,18 @@ public interface PlayerDataStatements {
         WHERE owning_server_uuid = :owningServerUuid
         """)
     int releaseAllForServer(UUID owningServerUuid);
+
+    /**
+     * Drops one player's lock, and only if this server is the one holding it. Unlike
+     * {@link #saveAndRelease} it leaves the payload alone, for the case where ownership was taken but
+     * there was never a player to read state from - writing an empty payload there would destroy the
+     * data the lock exists to protect.
+     */
+    @Transaction
+    @SqlUpdate("""
+        UPDATE shard_player_data
+        SET owning_server_uuid = NULL
+        WHERE player_uuid = :playerUuid AND owning_server_uuid = :owningServerUuid
+        """)
+    int release(UUID playerUuid, UUID owningServerUuid);
 }

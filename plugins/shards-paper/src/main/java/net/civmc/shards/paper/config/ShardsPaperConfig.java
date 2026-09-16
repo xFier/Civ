@@ -10,11 +10,16 @@ import org.bukkit.configuration.file.FileConfiguration;
  *
  * @param serverName the name this server is registered under in the proxy, which is also the
  *     identity it owns player data under
+ * @param failureMessage what a player is told when their data cannot be claimed or restored
  */
-public record ShardsPaperConfig(String serverName, String user, String password, String host, int port) {
+public record ShardsPaperConfig(String serverName, String failureMessage, String user, String password,
+                                String host, int port) {
 
     public ShardsPaperConfig {
         serverName = requireNonBlank(serverName, "server-name");
+        failureMessage = failureMessage == null || failureMessage.isBlank()
+            ? "Unable to load your player data. Please reconnect and try again."
+            : failureMessage;
         user = requireNonBlank(user, "rabbitmq.user");
         password = password == null ? "" : password;
         host = requireNonBlank(host, "rabbitmq.host");
@@ -31,6 +36,7 @@ public record ShardsPaperConfig(String serverName, String user, String password,
         }
         return new ShardsPaperConfig(
             configuration.getString("server-name"),
+            configuration.getString("failure-message"),
             rabbitmq.getString("user", "guest"),
             rabbitmq.getString("password", "guest"),
             rabbitmq.getString("host", "localhost"),

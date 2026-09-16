@@ -2,7 +2,6 @@ package net.civmc.shards.paper.rabbitmq;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.google.gson.JsonParseException;
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
@@ -21,6 +20,12 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import net.civmc.shards.api.PlayerClaimRequest;
+import net.civmc.shards.api.PlayerClaimResponse;
+import net.civmc.shards.api.PlayerReleaseRequest;
+import net.civmc.shards.api.PlayerReleaseResponse;
+import net.civmc.shards.api.PlayerSaveRequest;
+import net.civmc.shards.api.PlayerSaveResponse;
 import net.civmc.shards.api.ServerStartupRequest;
 import net.civmc.shards.api.ServerStartupResponse;
 import net.civmc.shards.api.ShardsRabbitMqTopology;
@@ -47,7 +52,7 @@ public final class ShardsClient implements AutoCloseable {
     private final Logger logger;
     private final Runnable onFirstConnect;
     private final AtomicBoolean firstConnectDone = new AtomicBoolean();
-    private final Map<UUID, CompletableFuture<ServerStartupResponse>> pendingResponses = new ConcurrentHashMap<>();
+    private final Map<UUID, Pending<?>> pendingResponses = new ConcurrentHashMap<>();
     private volatile boolean closed;
     private volatile boolean ready;
     private Connection connection;
@@ -70,6 +75,10 @@ public final class ShardsClient implements AutoCloseable {
         return connect();
     }
 
+    public boolean isReady() {
+        return this.ready;
+    }
+
     private synchronized boolean connect() {
         if (this.closed) {
             return false;
@@ -80,7 +89,8 @@ public final class ShardsClient implements AutoCloseable {
             final Map<String, Object> arguments = new HashMap<>();
             arguments.put("x-message-ttl", REPLY_TTL_MILLIS);
             this.replyQueue = this.channel.queueDeclare("", false, true, true, arguments).getQueue();
-            final DeliverCallback deliverCallback = (consumerTag, delivery) -> handleResponse(delivery.getBody());
+            final DeliverCallback deliverCallback = (consumerTag, delivery) ->
+                handleResponse(delivery.getProperties(), delivery.getBody());
             this.channel.basicConsume(this.replyQueue, true, deliverCallback, consumerTag -> {
             });
             this.ready = true;
@@ -99,18 +109,34 @@ public final class ShardsClient implements AutoCloseable {
         return true;
     }
 
-    public CompletableFuture<ServerStartupResponse> send(final ServerStartupRequest request) {
-        return publish(ShardsRabbitMqTopology.SERVER_STARTUP_QUEUE, request.requestId(), request);
+    public CompletableFuture<ServerStartupResponse> startup(final ServerStartupRequest request) {
+        return publish(ShardsRabbitMqTopology.SERVER_STARTUP_QUEUE, request.requestId(), request,
+            ServerStartupResponse.class);
     }
 
-    private CompletableFuture<ServerStartupResponse> publish(final String queue, final UUID requestId,
-                                                             final Object body) {
-        final CompletableFuture<ServerStartupResponse> responseFuture = new CompletableFuture<>();
+    public CompletableFuture<PlayerClaimResponse> claim(final PlayerClaimRequest request) {
+        return publish(ShardsRabbitMqTopology.PLAYER_CLAIM_QUEUE, request.requestId(), request,
+            PlayerClaimResponse.class);
+    }
+
+    public CompletableFuture<PlayerSaveResponse> save(final PlayerSaveRequest request) {
+        return publish(ShardsRabbitMqTopology.PLAYER_SAVE_QUEUE, request.requestId(), request,
+            PlayerSaveResponse.class);
+    }
+
+    public CompletableFuture<PlayerReleaseResponse> release(final PlayerReleaseRequest request) {
+        return publish(ShardsRabbitMqTopology.PLAYER_RELEASE_QUEUE, request.requestId(), request,
+            PlayerReleaseResponse.class);
+    }
+
+    private <RES> CompletableFuture<RES> publish(final String queue, final UUID requestId, final Object body,
+                                                 final Class<RES> responseType) {
+        final CompletableFuture<RES> responseFuture = new CompletableFuture<>();
         if (!this.ready || this.channel == null || !this.channel.isOpen()) {
             responseFuture.completeExceptionally(new IllegalStateException("Not connected to RabbitMQ"));
             return responseFuture;
         }
-        this.pendingResponses.put(requestId, responseFuture);
+        this.pendingResponses.put(requestId, new Pending<>(responseType, responseFuture));
         responseFuture.orTimeout(RESPONSE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .whenComplete((response, error) -> this.pendingResponses.remove(requestId));
         try {
@@ -130,21 +156,31 @@ public final class ShardsClient implements AutoCloseable {
         return responseFuture;
     }
 
-    private void handleResponse(final byte[] body) {
-        final ServerStartupResponse response;
+    private void handleResponse(final AMQP.BasicProperties properties, final byte[] body) {
+        // Matched on the correlation id rather than a field in the body, so a reply we cannot parse
+        // still completes its future with the failure instead of leaving the sender to time out
+        final UUID requestId = parseCorrelationId(properties);
+        if (requestId == null) {
+            this.logger.warning("Dropping a response with no correlation id");
+            return;
+        }
+        final Pending<?> pending = this.pendingResponses.remove(requestId);
+        if (pending == null) {
+            this.logger.log(Level.FINE, "Dropping unmatched response " + requestId);
+            return;
+        }
+        pending.complete(new String(body, StandardCharsets.UTF_8), this.logger);
+    }
+
+    private static UUID parseCorrelationId(final AMQP.BasicProperties properties) {
+        if (properties == null || properties.getCorrelationId() == null || properties.getCorrelationId().isBlank()) {
+            return null;
+        }
         try {
-            response = GSON.fromJson(new String(body, StandardCharsets.UTF_8), ServerStartupResponse.class);
-        } catch (final JsonParseException exception) {
-            this.logger.log(Level.WARNING, "Dropping malformed response", exception);
-            return;
+            return UUID.fromString(properties.getCorrelationId());
+        } catch (final IllegalArgumentException exception) {
+            return null;
         }
-        final CompletableFuture<ServerStartupResponse> responseFuture =
-            this.pendingResponses.remove(response.requestId());
-        if (responseFuture == null) {
-            this.logger.log(Level.FINE, "Dropping unmatched response " + response.requestId());
-            return;
-        }
-        responseFuture.complete(response);
     }
 
     @Override
@@ -152,7 +188,7 @@ public final class ShardsClient implements AutoCloseable {
         this.closed = true;
         this.ready = false;
         this.pendingResponses.values()
-            .forEach(pending -> pending.completeExceptionally(new IllegalStateException("Client closed")));
+            .forEach(pending -> pending.future().completeExceptionally(new IllegalStateException("Client closed")));
         this.pendingResponses.clear();
         closeQuietly();
     }
@@ -174,6 +210,22 @@ public final class ShardsClient implements AutoCloseable {
                 this.logger.log(Level.WARNING, "Failed to close the RabbitMQ connection", exception);
             } finally {
                 this.connection = null;
+            }
+        }
+    }
+
+    /**
+     * A request waiting for its answer, holding the type to parse that answer as. The type has to be
+     * carried here because the reply queue is shared by every kind of request.
+     */
+    private record Pending<RES>(Class<RES> responseType, CompletableFuture<RES> future) {
+
+        void complete(final String body, final Logger logger) {
+            try {
+                this.future.complete(GSON.fromJson(body, this.responseType));
+            } catch (final RuntimeException exception) {
+                logger.log(Level.WARNING, "Could not parse a " + this.responseType.getSimpleName(), exception);
+                this.future.completeExceptionally(exception);
             }
         }
     }

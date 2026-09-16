@@ -11,7 +11,7 @@ import net.civmc.shards.velocity.config.ShardRegion;
 import net.civmc.shards.velocity.config.ShardsConfig;
 import net.civmc.shards.velocity.database.PlayerDataRow;
 import net.civmc.shards.velocity.database.PlayerDataStatements;
-import net.civmc.shards.velocity.playerdata.PlayerLocation;
+import net.civmc.shards.api.PlayerLocation;
 import org.jdbi.v3.core.Jdbi;
 
 /**
