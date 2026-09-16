@@ -23,17 +23,17 @@ public final class DatabaseModule extends AbstractModule {
 
     @Provides
     @Singleton
-    public DatabaseConfig databaseConfig(final ShardsConfig config) {
-        return config.database();
+    public DatabaseConfig databaseConfig(final ShardsConfig shardsConfig) {
+        return shardsConfig.database();
     }
 
     @Provides
     @Singleton
-    public HikariDataSource dataSource(final DatabaseConfig config, final ProxyServer server,
-                                       final PluginContainer plugin) {
-        final HikariDataSource dataSource = config.createDataSource();
+    public HikariDataSource dataSource(final DatabaseConfig databaseConfig, final ProxyServer proxyServer,
+                                       final PluginContainer pluginContainer) {
+        final HikariDataSource dataSource = databaseConfig.createDataSource();
         // Guice has no lifecycle hooks, so whatever opens the pool also arranges for it to be closed
-        server.getEventManager().register(plugin, ProxyShutdownEvent.class, event -> dataSource.close());
+        proxyServer.getEventManager().register(pluginContainer, ProxyShutdownEvent.class, event -> dataSource.close());
         try {
             // Runs before anything can query, and fails startup rather than leaving half a schema
             ShardsDatabase.migrate(dataSource);
@@ -53,16 +53,10 @@ public final class DatabaseModule extends AbstractModule {
         // UUID columns are VARCHAR(36), so bind UUIDs as their string form
         jdbi.registerArgument(new AbstractArgumentFactory<UUID>(Types.VARCHAR) {
             @Override
-            protected Argument build(final UUID value, final ConfigRegistry config) {
+            protected Argument build(final UUID value, final ConfigRegistry configRegistry) {
                 return (position, statement, context) -> statement.setString(position, value.toString());
             }
         });
         return jdbi;
-    }
-
-    @Provides
-    @Singleton
-    public PlayerRouteStatements playerRouteStatements(final Jdbi jdbi) {
-        return jdbi.onDemand(PlayerRouteStatements.class);
     }
 }

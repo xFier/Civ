@@ -6,15 +6,15 @@ import net.civmc.shards.velocity.database.DatabaseModule;
 
 public final class ShardsModule extends AbstractModule {
 
-    private final ShardsConfig config;
+    private final ShardsConfig shardsConfig;
 
-    public ShardsModule(final ShardsConfig config) {
-        this.config = config;
+    public ShardsModule(final ShardsConfig shardsConfig) {
+        this.shardsConfig = shardsConfig;
     }
 
     @Override
     protected void configure() {
-        bind(ShardsConfig.class).toInstance(this.config);
+        bind(ShardsConfig.class).toInstance(this.shardsConfig);
         install(new DatabaseModule());
     }
 }

@@ -4,6 +4,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import org.spongepowered.configurate.objectmapping.ConfigSerializable;
 import org.spongepowered.configurate.objectmapping.ObjectMapper;
 import org.spongepowered.configurate.util.NamingSchemes;
@@ -11,14 +15,15 @@ import org.spongepowered.configurate.yaml.YamlConfigurationLoader;
 
 /**
  * config.yml. All keys are kebab-case versions of the component names, e.g. holdingServer -> holding-server.
+ *
+ * @param shards the areas each shard owns, keyed by the server name the shard runs on
+ * @param holdingServer where a player whose shard cannot be determined is sent
  */
 @ConfigSerializable
 public record ShardsConfig(
+    Map<String, List<ShardRegion>> shards,
     String holdingServer,
     String failureMessage,
-    String mainServer,
-    String zorwethServer,
-    String defaultServer,
     DatabaseConfig database
 ) {
 
@@ -29,11 +34,15 @@ public record ShardsConfig(
         // Absent keys arrive as null, so fall back to the previous defaults
         holdingServer = holdingServer == null ? "" : holdingServer.trim();
         failureMessage = failureMessage == null
-            ? "Unable to verify your rocket transfer. Please reconnect and try again."
+            ? "Unable to place you on a shard. Please reconnect and try again."
             : failureMessage;
-        mainServer = mainServer == null ? "main" : mainServer;
-        zorwethServer = zorwethServer == null ? "zorweth" : zorwethServer;
-        defaultServer = defaultServer == null ? mainServer : defaultServer;
+        // A proxy with no shards configured yet should still start; it just places nobody
+        shards = shards == null
+            ? Map.of()
+            // Not Map.copyOf: two shards can no longer claim the same block, but a stable iteration
+            // order still keeps startup errors and lookups reproducible between restarts
+            : Collections.unmodifiableMap(new LinkedHashMap<>(shards));
+        requireNoOverlap(shards);
     }
 
     /**
@@ -53,7 +62,7 @@ public record ShardsConfig(
                     Files.copy(input, configFile);
                 }
             }
-            final ShardsConfig config = YamlConfigurationLoader.builder()
+            final ShardsConfig shardsConfig = YamlConfigurationLoader.builder()
                 .path(configFile)
                 // Maps nodes onto @ConfigSerializable records, e.g. connection-timeout -> connectionTimeout
                 .defaultOptions(options -> options.serializers(serializers -> serializers.registerAnnotatedObjects(
@@ -61,13 +70,41 @@ public record ShardsConfig(
                 .build()
                 .load()
                 .get(ShardsConfig.class);
-            if (config == null) {
+            if (shardsConfig == null) {
                 throw new IllegalStateException("config.yml is empty");
             }
-            return config;
+            return shardsConfig;
         } catch (final IOException exception) {
             // Includes SerializationException, e.g. a required database key is missing
             throw new RuntimeException("Could not load Shards Velocity config", exception);
+        }
+    }
+
+    /**
+     * Two shards owning the same block would put one player's data on either of them depending on
+     * config order, so this refuses to start rather than warning. {@link ShardRegion#overlaps} is
+     * exact, so there are no false positives to work around: shards sharing a border are fine.
+     */
+    private static void requireNoOverlap(final Map<String, List<ShardRegion>> shards) {
+        final List<Map.Entry<String, ShardRegion>> shardRegions = shards.entrySet().stream()
+            .flatMap(shardEntry -> shardEntry.getValue().stream()
+                .map(region -> Map.entry(shardEntry.getKey(), region)))
+            .toList();
+        for (int firstIndex = 0; firstIndex < shardRegions.size(); firstIndex++) {
+            for (int secondIndex = firstIndex + 1; secondIndex < shardRegions.size(); secondIndex++) {
+                final Map.Entry<String, ShardRegion> firstShard = shardRegions.get(firstIndex);
+                final Map.Entry<String, ShardRegion> secondShard = shardRegions.get(secondIndex);
+                // A shard may cover the same ground twice with its own areas; only two different
+                // shards claiming it is ambiguous
+                if (firstShard.getKey().equals(secondShard.getKey())) {
+                    continue;
+                }
+                if (firstShard.getValue().overlaps(secondShard.getValue())) {
+                    throw new IllegalArgumentException(
+                        "Shards " + firstShard.getKey() + " and " + secondShard.getKey() + " both own blocks in "
+                            + firstShard.getValue().boundingBox().intersection(secondShard.getValue().boundingBox()));
+                }
+            }
         }
     }
 }

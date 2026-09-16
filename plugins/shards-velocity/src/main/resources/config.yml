@@ -9,8 +9,26 @@ database:
   idle-timeout: 600000
   max-lifetime: 7200000
 
+# A shard owns blocks on the x/z plane; every world at those coordinates belongs to it.
+# Each area is a polygon given as its corners, in order. The ring closes on its own, so
+# don't repeat the first corner. A rectangle is just its four corners; give a shard made
+# of disjoint pieces several areas.
+#
+# Edges must run along an axis, so corners alternate between moving in x and moving in z.
+# Write a border that looks diagonal as the steps it really is - blocks are axis-aligned,
+# so that is what it would be anyway, and spelling it out means the boundary is what you
+# see here rather than something the arithmetic decides.
+#
+# Corners sit on the grid lines between blocks and the upper edge is exclusive, so the
+# first area below owns blocks -10000..-1 and the second owns 0..9999. Both naming the
+# same 0 is what makes the border seamless: no gap, and no block owned by both. Two
+# shards that do overlap are a startup error. Shards don't have to touch, though - blocks
+# owned by nobody are fine, and land there sends a player to the holding server.
+shards:
+  main:
+    - vertices: [{x: -10000, z: -10000}, {x: 0, z: -10000}, {x: 0, z: 10000}, {x: -10000, z: 10000}]
+  zorweth:
+    - vertices: [{x: 0, z: -10000}, {x: 10000, z: -10000}, {x: 10000, z: 10000}, {x: 0, z: 10000}]
+
 holding-server: "pvp"
-failure-message: "Unable to verify your rocket transfer. Please reconnect and try again."
-main-server: main
-zorweth-server: zorweth
-default-server: main
+failure-message: "Unable to place you on a shard. Please reconnect and try again."
