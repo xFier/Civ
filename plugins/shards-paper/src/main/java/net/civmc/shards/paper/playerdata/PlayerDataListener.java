@@ -8,6 +8,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.BooleanSupplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import net.civmc.shards.api.PlayerClaimRequest;
@@ -46,6 +47,10 @@ public final class PlayerDataListener implements Listener {
     // A login can be allowed and then never complete - the client gives up, the connection drops. The
     // lock would otherwise be held by a server with nobody on it until that server next restarts
     private static final long JOIN_TIMEOUT_TICKS = 20L * 15L;
+    // Distinct from the general failure message: nothing is wrong with this player's data, the server
+    // simply is not ready for anyone yet, and it says so rather than implying their data is at risk
+    private static final Component NOT_READY_MESSAGE =
+        Component.text("This shard is still starting up. Please reconnect in a moment.");
 
     private final JavaPlugin plugin;
     private final ShardsClient client;
@@ -62,10 +67,11 @@ public final class PlayerDataListener implements Listener {
     private final Map<UUID, Long> spawnLocationAt = new ConcurrentHashMap<>();
     private final OwnedPlayers owned;
     private final TransferService transfers;
+    private final BooleanSupplier startupComplete;
 
     public PlayerDataListener(final JavaPlugin plugin, final ShardsClient client, final String serverName,
                               final String failureMessage, final OwnedPlayers owned,
-                              final TransferService transfers) {
+                              final TransferService transfers, final BooleanSupplier startupComplete) {
         this.plugin = plugin;
         this.client = client;
         this.logger = plugin.getLogger();
@@ -73,11 +79,20 @@ public final class PlayerDataListener implements Listener {
         this.failureMessage = Component.text(failureMessage);
         this.owned = owned;
         this.transfers = transfers;
+        this.startupComplete = startupComplete;
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onPreLogin(final AsyncPlayerPreLoginEvent event) {
         final UUID playerUuid = event.getUniqueId();
+        // Before the claim, because this is not about the player. Until the startup handshake has been
+        // answered this server does not know which ground it owns, and a border that owns nowhere owns
+        // everywhere - so letting someone in would put them on a shard with no edge enforced at all
+        if (!this.startupComplete.getAsBoolean()) {
+            refuse(event, "the startup handshake has not completed, so this server has no shard areas yet",
+                null, NOT_READY_MESSAGE);
+            return;
+        }
         final long askedAt = System.nanoTime();
         final PlayerClaimResponse response;
         try {
@@ -243,11 +258,16 @@ public final class PlayerDataListener implements Listener {
     }
 
     private void refuse(final AsyncPlayerPreLoginEvent event, final String reason, final Throwable cause) {
+        refuse(event, reason, cause, this.failureMessage);
+    }
+
+    private void refuse(final AsyncPlayerPreLoginEvent event, final String reason, final Throwable cause,
+                        final Component message) {
         if (cause == null) {
             this.logger.warning("Refusing login of " + event.getUniqueId() + ": " + reason);
         } else {
             this.logger.log(Level.SEVERE, "Refusing login of " + event.getUniqueId() + ": " + reason, cause);
         }
-        event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, this.failureMessage);
+        event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, message);
     }
 }

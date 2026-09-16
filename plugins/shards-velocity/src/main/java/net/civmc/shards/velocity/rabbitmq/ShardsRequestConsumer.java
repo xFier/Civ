@@ -64,6 +64,7 @@ public final class ShardsRequestConsumer implements AutoCloseable {
     private synchronized boolean connect() {
         try {
             this.connection = this.connectionFactory.newConnection("shards-velocity");
+            watchBlocking(this.connection);
             for (final RequestHandler<?, ?> handler : this.handlers) {
                 consume(handler);
             }
@@ -79,6 +80,22 @@ public final class ShardsRequestConsumer implements AutoCloseable {
             this.logger.error("Failed to connect the Shards request consumer", exception);
             return false;
         }
+    }
+
+    /**
+     * Says so when the broker stops accepting the replies this consumer publishes.
+     *
+     * <p>A resource alarm - the broker running low on disk or memory - blocks publishers instead of
+     * refusing them. Requests still arrive and are still handled, so this side looks healthy, while
+     * every reply is held and every server waiting for one runs to its timeout. Diagnosed once from
+     * queue statistics, which is not a reasonable thing to need; this makes it a log line.</p>
+     */
+    private void watchBlocking(final Connection connection) {
+        connection.addBlockedListener(
+            reason -> this.logger.error("RabbitMQ has blocked this connection ({}). Requests will be "
+                + "handled but no reply can be sent, so every server will time out. Check the broker's "
+                + "free disk space and memory", reason),
+            () -> this.logger.info("RabbitMQ has unblocked this connection; replies resume"));
     }
 
     private <REQ, RES> void consume(final RequestHandler<REQ, RES> handler) throws IOException {
