@@ -56,6 +56,10 @@ public final class PlayerDataListener implements Listener {
     private final Map<UUID, PlayerSnapshot> pendingSnapshots = new ConcurrentHashMap<>();
     private final Map<UUID, PlayerLocation> pendingLocations = new ConcurrentHashMap<>();
     private final Map<UUID, BukkitTask> joinTimeouts = new ConcurrentHashMap<>();
+    // Only for the timing line at join. Kept apart from the state above so it can be read and
+    // discarded without touching anything that matters
+    private final Map<UUID, Long> preLoginDoneAt = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> spawnLocationAt = new ConcurrentHashMap<>();
     private final OwnedPlayers owned;
     private final TransferService transfers;
 
@@ -114,11 +118,16 @@ public final class PlayerDataListener implements Listener {
             case ERROR -> refuse(event, "the proxy refused the claim: " + response.failureMessage(), null);
             default -> refuse(event, "unknown claim status " + response.status(), null);
         }
+        this.preLoginDoneAt.put(playerUuid, System.nanoTime());
     }
 
     @EventHandler
     public void onSpawnLocation(final AsyncPlayerSpawnLocationEvent event) {
         final UUID playerUuid = event.getConnection().getProfile().getId();
+        // Recorded before anything else here, and whether or not there is a location to apply: this
+        // event is the first moment after the client has finished reconfiguring, so the gap since
+        // pre-login is what that cost
+        this.spawnLocationAt.put(playerUuid, System.nanoTime());
         final PlayerLocation stored = this.pendingLocations.remove(playerUuid);
         if (stored == null) {
             return;
@@ -144,6 +153,7 @@ public final class PlayerDataListener implements Listener {
         final Player player = event.getPlayer();
         final UUID playerUuid = player.getUniqueId();
         cancelJoinTimeout(playerUuid);
+        reportLoginTiming(playerUuid);
         final PlayerSnapshot snapshot = this.pendingSnapshots.remove(playerUuid);
         if (snapshot == null) {
             return;
@@ -176,6 +186,29 @@ public final class PlayerDataListener implements Listener {
         this.transfers.forget(event.getPlayer().getUniqueId());
     }
 
+    /**
+     * Where the pause between shards actually goes.
+     *
+     * <p>Pre-login to spawn location spans the client leaving play, being sent the registries and tags,
+     * rebuilding them and saying it is ready - the server is mostly idle waiting through it. Spawn
+     * location to join is this server putting the player into the world. Anything after join, such as
+     * terrain appearing, is on the client and invisible from here.</p>
+     */
+    private void reportLoginTiming(final UUID playerUuid) {
+        final Long preLogin = this.preLoginDoneAt.remove(playerUuid);
+        final Long spawnLocation = this.spawnLocationAt.remove(playerUuid);
+        if (preLogin == null || spawnLocation == null) {
+            return;
+        }
+        final long now = System.nanoTime();
+        this.logger.info(String.format(
+            "Login of %s: %dms reconfiguring the client, %dms placing them, %dms from claim to join",
+            playerUuid,
+            (spawnLocation - preLogin) / 1_000_000L,
+            (now - spawnLocation) / 1_000_000L,
+            (now - preLogin) / 1_000_000L));
+    }
+
     private static long elapsedMillis(final long fromNanos) {
         return (System.nanoTime() - fromNanos) / 1_000_000L;
     }
@@ -197,6 +230,8 @@ public final class PlayerDataListener implements Listener {
         }
         this.pendingSnapshots.remove(playerUuid);
         this.pendingLocations.remove(playerUuid);
+        this.preLoginDoneAt.remove(playerUuid);
+        this.spawnLocationAt.remove(playerUuid);
         this.owned.releaseWithoutSaving(playerUuid);
     }
 
