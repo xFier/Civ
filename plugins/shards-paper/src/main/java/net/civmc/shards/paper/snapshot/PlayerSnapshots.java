@@ -98,7 +98,9 @@ public final class PlayerSnapshots {
             captureStatistics(player),
             captureRecipes(player),
             captureLocation(player.getRespawnLocation()),
-            vehicle);
+            vehicle,
+            player.getLocation().getYaw(),
+            player.getLocation().getPitch());
     }
 
     public static void restore(final Player player, final PlayerSnapshot snapshot) {

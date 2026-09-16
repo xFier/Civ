@@ -26,6 +26,9 @@ import java.util.Map;
  * @param statistics encoded by {@link #statisticKey}, and only the non-zero ones
  * @param advancementCriteria advancement key to the criteria awarded on it, only for advancements
  *     with at least one
+ * @param yaw which way the player was facing, and {@code pitch} how far up or down. Carried here
+ *     rather than in the stored coordinates because those exist for the proxy to work out which shard
+ *     owns a player, and where someone is looking has no bearing on that
  * @param vehicle what the player was riding, set only by a transfer. Null on an ordinary quit, where
  *     the vehicle stays in the world and the server saves it itself - carrying it in that case would
  *     recreate it at the next login and leave two
@@ -58,7 +61,9 @@ public record PlayerSnapshot(
     Map<String, Integer> statistics,
     List<String> discoveredRecipes,
     LocationSnapshot respawnLocation,
-    VehicleSnapshot vehicle
+    VehicleSnapshot vehicle,
+    float yaw,
+    float pitch
 ) {
 
     public static final int CURRENT_VERSION = 1;

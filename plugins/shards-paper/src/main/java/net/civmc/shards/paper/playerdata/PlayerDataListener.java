@@ -127,7 +127,12 @@ public final class PlayerDataListener implements Listener {
                 + "; leaving them at the default spawn");
             return;
         }
-        event.setSpawnLocation(new Location(world, stored.x(), stored.y(), stored.z()));
+        // Orientation comes from the snapshot, not the stored coordinates: arriving without it turns
+        // every border crossing into being spun round to face south
+        final PlayerSnapshot snapshot = this.pendingSnapshots.get(playerUuid);
+        final float yaw = snapshot == null ? 0.0f : snapshot.yaw();
+        final float pitch = snapshot == null ? 0.0f : snapshot.pitch();
+        event.setSpawnLocation(new Location(world, stored.x(), stored.y(), stored.z(), yaw, pitch));
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
