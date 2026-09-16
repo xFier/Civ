@@ -26,6 +26,9 @@ import java.util.Map;
  * @param statistics encoded by {@link #statisticKey}, and only the non-zero ones
  * @param advancementCriteria advancement key to the criteria awarded on it, only for advancements
  *     with at least one
+ * @param vehicle what the player was riding, set only by a transfer. Null on an ordinary quit, where
+ *     the vehicle stays in the world and the server saves it itself - carrying it in that case would
+ *     recreate it at the next login and leave two
  */
 public record PlayerSnapshot(
     int version,
@@ -54,7 +57,8 @@ public record PlayerSnapshot(
     Map<String, List<String>> advancementCriteria,
     Map<String, Integer> statistics,
     List<String> discoveredRecipes,
-    LocationSnapshot respawnLocation
+    LocationSnapshot respawnLocation,
+    VehicleSnapshot vehicle
 ) {
 
     public static final int CURRENT_VERSION = 1;
@@ -63,10 +67,10 @@ public record PlayerSnapshot(
      * What the public API cannot round-trip, listed so it is a known limitation rather than a
      * discovery. The last death location can be read but not written, so the compass of a player who
      * dies and then crosses a border points at the destination's idea of their death, not the real
-     * one. Vehicle and passenger state is not carried either: a player crossing a border leaves the
-     * boat behind.
+     * one. Anything else riding with the player, and anything on a lead, stays behind - only the
+     * vehicle the player is on travels.
      */
-    public static final List<String> NOT_CARRIED = List.of("lastDeathLocation", "vehicle", "passengers");
+    public static final List<String> NOT_CARRIED = List.of("lastDeathLocation", "passengers", "leashedEntities");
 
     public PlayerSnapshot {
         // Defaults rather than rejection: a row written before a field existed must still load, and

@@ -1,6 +1,7 @@
 package net.civmc.shards.paper.border;
 
 import java.util.Base64;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -12,9 +13,11 @@ import net.civmc.shards.api.PlayerTransferResponse;
 import net.civmc.shards.api.TransferStatus;
 import net.civmc.shards.api.snapshot.PlayerSnapshot;
 import net.civmc.shards.api.snapshot.PlayerSnapshotCodec;
+import net.civmc.shards.api.snapshot.VehicleSnapshot;
 import net.civmc.shards.paper.playerdata.OwnedPlayers;
 import net.civmc.shards.paper.rabbitmq.ShardsClient;
 import net.civmc.shards.paper.snapshot.PlayerSnapshots;
+import net.civmc.shards.paper.snapshot.Vehicles;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -40,6 +43,8 @@ public final class TransferService {
     private final String serverName;
     private final Component failureMessage;
     private final Set<UUID> inTransit = ConcurrentHashMap.newKeySet();
+    // What was taken out from under each player, so it can be put back if the handover never starts
+    private final Map<UUID, VehicleSnapshot> removedVehicles = new ConcurrentHashMap<>();
 
     public TransferService(final JavaPlugin plugin, final ShardsClient client, final OwnedPlayers owned,
                            final Logger logger, final String serverName, final String failureMessage) {
@@ -117,8 +122,10 @@ public final class TransferService {
         }
 
         final PlayerTransferRequest request;
+        final VehicleSnapshot vehicle;
         try {
-            final PlayerSnapshot snapshot = PlayerSnapshots.capture(player);
+            final PlayerSnapshot snapshot = PlayerSnapshots.captureForTransfer(player);
+            vehicle = snapshot.vehicle();
             final String payload = Base64.getEncoder().encodeToString(PlayerSnapshotCodec.toBytes(snapshot));
             request = shardName == null
                 ? PlayerTransferRequest.toLocation(this.serverName, playerUuid, payload, target)
@@ -127,6 +134,15 @@ public final class TransferService {
             this.logger.log(Level.SEVERE, "Could not prepare a transfer for " + playerUuid, exception);
             this.inTransit.remove(playerUuid);
             return false;
+        }
+
+        // Taken out of this world before the handover is sent, not after it is confirmed. Between
+        // sending and being told it worked the destination may already have rebuilt it, so removing
+        // afterwards would leave one at each end - and a duplicated horse is worse than a horse that
+        // briefly exists nowhere, which the failure path below puts back
+        if (vehicle != null) {
+            this.removedVehicles.put(playerUuid, vehicle);
+            Vehicles.remove(player);
         }
 
         // Ownership is given up by the proxy as part of the transfer, so this server must stop
@@ -144,20 +160,51 @@ public final class TransferService {
         this.inTransit.remove(playerUuid);
         final Player player = Bukkit.getPlayer(playerUuid);
         if (error != null) {
+            putVehicleBack(playerUuid, player);
             failed(playerUuid, player, "the proxy could not be reached", error);
             return;
         }
         if (response.status() == TransferStatus.TRANSFERRED) {
+            // It travelled in the payload and the destination rebuilds it there
+            this.removedVehicles.remove(playerUuid);
             return;
         }
         if (response.status() == TransferStatus.NO_DESTINATION) {
             // Ground owned by nobody. A valid configuration, so the edge is a wall: they stay, still
             // owned here, and nothing was written
             this.owned.add(playerUuid);
+            putVehicleBack(playerUuid, player);
             return;
         }
+        putVehicleBack(playerUuid, player);
         failed(playerUuid, player, response.status() + ": " + response.failureMessage(), null);
     }
+
+    /**
+     * Rebuilds a vehicle that was taken away for a handover that then did not happen.
+     *
+     * <p>If the player has already gone there is nothing to seat, and the vehicle is reported rather
+     * than rebuilt riderless in a world they are not in - it is recoverable from the log, which a
+     * silently dropped horse is not.</p>
+     */
+    private void putVehicleBack(final UUID playerUuid, final Player player) {
+        final VehicleSnapshot vehicle = this.removedVehicles.remove(playerUuid);
+        if (vehicle == null) {
+            return;
+        }
+        if (player == null) {
+            this.logger.severe("Lost the " + vehicle.type() + " " + playerUuid
+                + " was riding: their transfer failed after it was removed and they are no longer here");
+            return;
+        }
+        try {
+            Vehicles.restore(player, vehicle);
+        } catch (final RuntimeException exception) {
+            this.logger.log(Level.SEVERE, "Could not give " + playerUuid + " back the " + vehicle.type()
+                + " they were riding", exception);
+        }
+    }
+
 
     private void failed(final UUID playerUuid, final Player player, final String reason, final Throwable error) {
         if (error == null) {

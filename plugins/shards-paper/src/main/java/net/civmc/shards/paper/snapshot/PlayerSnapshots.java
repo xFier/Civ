@@ -10,6 +10,7 @@ import java.util.Map;
 import net.civmc.shards.api.snapshot.LocationSnapshot;
 import net.civmc.shards.api.snapshot.PlayerSnapshot;
 import net.civmc.shards.api.snapshot.PotionEffectSnapshot;
+import net.civmc.shards.api.snapshot.VehicleSnapshot;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -42,7 +43,25 @@ public final class PlayerSnapshots {
     private PlayerSnapshots() {
     }
 
+    /**
+     * Reads a player, without whatever they are riding.
+     *
+     * <p>For an ordinary save. The vehicle stays in the world and the server persists it like any
+     * other entity, so carrying it here too would rebuild it at the next login and leave two.</p>
+     */
     public static PlayerSnapshot capture(final Player player) {
+        return capture(player, null);
+    }
+
+    /**
+     * Reads a player along with what they are riding, for a handover to another shard - where the
+     * vehicle cannot stay behind because the player is not coming back for it.
+     */
+    public static PlayerSnapshot captureForTransfer(final Player player) {
+        return capture(player, Vehicles.capture(player));
+    }
+
+    private static PlayerSnapshot capture(final Player player, final VehicleSnapshot vehicle) {
         return new PlayerSnapshot(
             PlayerSnapshot.CURRENT_VERSION,
             encode(ItemStack.serializeItemsAsBytes(player.getInventory().getContents())),
@@ -70,7 +89,8 @@ public final class PlayerSnapshots {
             captureAdvancements(player),
             captureStatistics(player),
             captureRecipes(player),
-            captureLocation(player.getRespawnLocation()));
+            captureLocation(player.getRespawnLocation()),
+            vehicle);
     }
 
     public static void restore(final Player player, final PlayerSnapshot snapshot) {
@@ -112,6 +132,8 @@ public final class PlayerSnapshots {
         restoreStatistics(player, snapshot);
         restoreRecipes(player, snapshot);
         restoreRespawnLocation(player, snapshot);
+        // Last: the player has to exist where they are before anything can be put underneath them
+        Vehicles.restore(player, snapshot.vehicle());
     }
 
     private static String capturePersistentData(final Player player) {
