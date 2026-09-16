@@ -29,6 +29,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
+import org.bukkit.util.Vector;
 
 /**
  * Reads a player into a {@link PlayerSnapshot} and writes one back.
@@ -100,7 +101,14 @@ public final class PlayerSnapshots {
             captureLocation(player.getRespawnLocation()),
             vehicle,
             player.getLocation().getYaw(),
-            player.getLocation().getPitch());
+            player.getLocation().getPitch(),
+            player.getVelocity().getX(),
+            player.getVelocity().getY(),
+            player.getVelocity().getZ(),
+            player.getFallDistance(),
+            player.isSprinting(),
+            player.isGliding(),
+            player.isSwimming());
     }
 
     public static void restore(final Player player, final PlayerSnapshot snapshot) {
@@ -144,6 +152,29 @@ public final class PlayerSnapshots {
         restoreRespawnLocation(player, snapshot);
         // Last: the player has to exist where they are before anything can be put underneath them
         Vehicles.restore(player, snapshot.vehicle());
+    }
+
+    /**
+     * Puts a player back into the motion they were already in.
+     *
+     * <p>Separate from {@link #restore} because it has to happen a tick later. On the tick a player
+     * joins, the server sends them their position, and that overrides anything set here - so velocity
+     * applied during the join is thrown away and they stop dead in mid-air.</p>
+     *
+     * <p>Gliding needs the same wait for a different reason: it is refused unless the player already
+     * has elytra on, which is true only once the inventory from {@link #restore} has been applied.</p>
+     */
+    public static void restoreMotion(final Player player, final PlayerSnapshot snapshot) {
+        player.setVelocity(new Vector(snapshot.velocityX(), snapshot.velocityY(), snapshot.velocityZ()));
+        // Before gliding and sprinting, which a fall can clear
+        player.setFallDistance(snapshot.fallDistance());
+        if (snapshot.gliding()) {
+            player.setGliding(true);
+        }
+        player.setSprinting(snapshot.sprinting());
+        if (snapshot.swimming()) {
+            player.setSwimming(true);
+        }
     }
 
     private static String capturePersistentData(final Player player) {

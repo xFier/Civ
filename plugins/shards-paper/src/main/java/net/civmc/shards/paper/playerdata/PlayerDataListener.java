@@ -146,6 +146,13 @@ public final class PlayerDataListener implements Listener {
         }
         try {
             PlayerSnapshots.restore(player, snapshot);
+            // A tick later: the join tick sends the player their position, which discards any velocity
+            // set during it, and gliding is refused until the elytra from the restore above is on
+            Bukkit.getScheduler().runTask(this.plugin, () -> {
+                if (player.isOnline()) {
+                    PlayerSnapshots.restoreMotion(player, snapshot);
+                }
+            });
         } catch (final RuntimeException exception) {
             // Their stored state is on the proxy and was not consumed by a failed restore, so kicking
             // leaves it recoverable. Letting them play on half-restored state would not

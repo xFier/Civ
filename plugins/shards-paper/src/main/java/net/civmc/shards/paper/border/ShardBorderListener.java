@@ -67,10 +67,13 @@ public final class ShardBorderListener implements Listener {
         if (!this.border.isOutside(to)) {
             return;
         }
-        // Cancelled either way. The player is held at the edge until the transfer answers, so they
-        // cannot keep walking into ground this server is not authoritative for
-        event.setCancelled(true);
+        // Handed over first, cancelled second. Cancelling a move puts the player back where they
+        // were, and their motion goes with it - so capturing after the cancel would carry a player
+        // who is standing still, and a sprint jump over a border would stop dead on the far side.
+        // Cancelled either way: they are held at the edge until the transfer answers, so they cannot
+        // keep walking into ground this server is not authoritative for
         this.transfers.transferTo(event.getPlayer(), to);
+        event.setCancelled(true);
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)

@@ -29,6 +29,11 @@ import java.util.Map;
  * @param yaw which way the player was facing, and {@code pitch} how far up or down. Carried here
  *     rather than in the stored coordinates because those exist for the proxy to work out which shard
  *     owns a player, and where someone is looking has no bearing on that
+ * @param velocityX how the player was already moving, so a jump or a fall carries on across a border
+ *     rather than stopping dead in mid-air
+ * @param fallDistance how far they have fallen so far. Carried because resetting it would make any
+ *     border a way to cancel fall damage, which is a drop someone would build on purpose
+ * @param gliding whether they were flying on elytra - without it they fall out of the sky on arrival
  * @param vehicle what the player was riding, set only by a transfer. Null on an ordinary quit, where
  *     the vehicle stays in the world and the server saves it itself - carrying it in that case would
  *     recreate it at the next login and leave two
@@ -63,7 +68,14 @@ public record PlayerSnapshot(
     LocationSnapshot respawnLocation,
     VehicleSnapshot vehicle,
     float yaw,
-    float pitch
+    float pitch,
+    double velocityX,
+    double velocityY,
+    double velocityZ,
+    float fallDistance,
+    boolean sprinting,
+    boolean gliding,
+    boolean swimming
 ) {
 
     public static final int CURRENT_VERSION = 1;
