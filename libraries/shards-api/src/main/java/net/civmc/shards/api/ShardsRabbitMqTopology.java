@@ -22,6 +22,11 @@ public final class ShardsRabbitMqTopology {
     public static final String PLAYER_CHECKPOINT_QUEUE = "shards.playerdata.checkpoint";
     public static final boolean PLAYER_QUEUE_DURABLE = true;
 
+    // Not durable: a probe is about where a player is standing right now, so one that outlived a
+    // broker restart would be answered long after it stopped being a question anybody had
+    public static final String BORDER_PROBE_QUEUE = "shards.border.probe";
+    public static final boolean BORDER_PROBE_QUEUE_DURABLE = false;
+
     public static final String REPLY_QUEUE_PREFIX = "shards.replies.";
 
     /**

@@ -7,6 +7,7 @@ import net.civmc.shards.api.ServerStartupRequest;
 import net.civmc.shards.api.ServerStartupResponse;
 import net.civmc.shards.paper.border.ArrivalCue;
 import net.civmc.shards.paper.border.BorderNotices;
+import net.civmc.shards.paper.border.BorderOutlook;
 import net.civmc.shards.paper.border.ShardBorder;
 import net.civmc.shards.paper.border.ShardBorderListener;
 import net.civmc.shards.paper.border.TransferService;
@@ -64,8 +65,9 @@ public final class ShardsPaperPlugin extends JavaPlugin {
         if (!arrivalCue.isConfigured()) {
             getLogger().info("No arrival title configured, so a crossing into this shard is unannounced");
         }
+        final BorderOutlook outlook = new BorderOutlook(this.client, this.config.serverName(), getLogger());
         getServer().getPluginManager().registerEvents(
-            new ShardBorderListener(this.border, this.transfers, notices), this);
+            new ShardBorderListener(this.border, this.transfers, notices, outlook), this);
         getCommand("shardsnapshot").setExecutor(new SnapshotVerifyCommand());
         startPeriodicSave();
     }

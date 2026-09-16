@@ -22,6 +22,8 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import net.civmc.shards.api.BorderProbeRequest;
+import net.civmc.shards.api.BorderProbeResponse;
 import net.civmc.shards.api.PlayerCheckpointRequest;
 import net.civmc.shards.api.PlayerCheckpointResponse;
 import net.civmc.shards.api.PlayerClaimRequest;
@@ -185,6 +187,15 @@ public final class ShardsClient implements AutoCloseable {
     public CompletableFuture<PlayerTransferResponse> transfer(final PlayerTransferRequest request) {
         return publish(ShardsRabbitMqTopology.PLAYER_TRANSFER_QUEUE, request.requestId(), request,
             PlayerTransferResponse.class);
+    }
+
+    /**
+     * Asks what owns a place. Nothing is written and no lock is taken, so this is safe to send while
+     * a player is merely walking near an edge.
+     */
+    public CompletableFuture<BorderProbeResponse> probeBorder(final BorderProbeRequest request) {
+        return publish(ShardsRabbitMqTopology.BORDER_PROBE_QUEUE, request.requestId(), request,
+            BorderProbeResponse.class);
     }
 
     public CompletableFuture<PlayerReleaseResponse> release(final PlayerReleaseRequest request) {

@@ -54,12 +54,14 @@ public final class ShardBorderListener implements Listener {
     private final ShardBorder border;
     private final TransferService transfers;
     private final BorderNotices notices;
+    private final BorderOutlook outlook;
 
     public ShardBorderListener(final ShardBorder border, final TransferService transfers,
-                               final BorderNotices notices) {
+                               final BorderNotices notices, final BorderOutlook outlook) {
         this.border = border;
         this.transfers = transfers;
         this.notices = notices;
+        this.outlook = outlook;
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -93,7 +95,8 @@ public final class ShardBorderListener implements Listener {
      */
     private void warnIfNearEdge(final Player player, final Location at) {
         this.border.nearestEdge((int) Math.floor(at.getX()), (int) Math.floor(at.getZ()), APPROACH_RADIUS)
-            .ifPresent(edge -> this.notices.approaching(player, null));
+            .ifPresent(edge -> this.notices.approaching(player,
+                BorderNotices.approachMessage(this.outlook.beyond(at, edge).orElse(null))));
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)

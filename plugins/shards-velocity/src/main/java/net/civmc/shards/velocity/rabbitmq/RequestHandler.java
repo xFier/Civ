@@ -15,6 +15,15 @@ public interface RequestHandler<REQ, RES> {
 
     String queue();
 
+    /**
+     * Whether this queue survives a broker restart. Durable by default, because most of these carry
+     * a player's data and losing one loses work; a handler whose requests stop being worth answering
+     * the moment they are stale says so by overriding this.
+     */
+    default boolean durable() {
+        return true;
+    }
+
     Class<REQ> requestType();
 
     UUID requestId(REQ request);
