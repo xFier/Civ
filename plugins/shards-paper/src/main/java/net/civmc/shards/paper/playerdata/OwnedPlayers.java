@@ -44,6 +44,15 @@ public final class OwnedPlayers {
         this.owned.add(playerUuid);
     }
 
+    /**
+     * Stops treating a player as owned here without telling the proxy anything. For a transfer, where
+     * the proxy gives the ownership up itself as part of moving them - releasing again from here
+     * would be releasing a lock the destination has since taken.
+     */
+    public void forget(final UUID playerUuid) {
+        this.owned.remove(playerUuid);
+    }
+
     public boolean holds(final UUID playerUuid) {
         return this.owned.contains(playerUuid);
     }

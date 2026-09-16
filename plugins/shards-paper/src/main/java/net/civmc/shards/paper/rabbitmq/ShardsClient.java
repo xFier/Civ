@@ -26,6 +26,8 @@ import net.civmc.shards.api.PlayerReleaseRequest;
 import net.civmc.shards.api.PlayerReleaseResponse;
 import net.civmc.shards.api.PlayerSaveRequest;
 import net.civmc.shards.api.PlayerSaveResponse;
+import net.civmc.shards.api.PlayerTransferRequest;
+import net.civmc.shards.api.PlayerTransferResponse;
 import net.civmc.shards.api.ServerStartupRequest;
 import net.civmc.shards.api.ServerStartupResponse;
 import net.civmc.shards.api.ShardsRabbitMqTopology;
@@ -122,6 +124,11 @@ public final class ShardsClient implements AutoCloseable {
     public CompletableFuture<PlayerSaveResponse> save(final PlayerSaveRequest request) {
         return publish(ShardsRabbitMqTopology.PLAYER_SAVE_QUEUE, request.requestId(), request,
             PlayerSaveResponse.class);
+    }
+
+    public CompletableFuture<PlayerTransferResponse> transfer(final PlayerTransferRequest request) {
+        return publish(ShardsRabbitMqTopology.PLAYER_TRANSFER_QUEUE, request.requestId(), request,
+            PlayerTransferResponse.class);
     }
 
     public CompletableFuture<PlayerReleaseResponse> release(final PlayerReleaseRequest request) {

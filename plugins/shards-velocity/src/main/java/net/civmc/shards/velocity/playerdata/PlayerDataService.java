@@ -1,11 +1,11 @@
 package net.civmc.shards.velocity.playerdata;
 
-import net.civmc.shards.api.PlayerLocation;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import java.sql.SQLException;
 import java.util.Optional;
 import java.util.UUID;
+import net.civmc.shards.api.PlayerLocation;
 import net.civmc.shards.velocity.database.PlayerDataRow;
 import net.civmc.shards.velocity.database.PlayerDataStatements;
 import org.jdbi.v3.core.Jdbi;

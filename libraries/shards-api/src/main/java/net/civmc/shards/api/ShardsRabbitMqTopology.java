@@ -18,6 +18,7 @@ public final class ShardsRabbitMqTopology {
     public static final String PLAYER_CLAIM_QUEUE = "shards.playerdata.claim";
     public static final String PLAYER_SAVE_QUEUE = "shards.playerdata.save";
     public static final String PLAYER_RELEASE_QUEUE = "shards.playerdata.release";
+    public static final String PLAYER_TRANSFER_QUEUE = "shards.playerdata.transfer";
     public static final boolean PLAYER_QUEUE_DURABLE = true;
 
     private ShardsRabbitMqTopology() {

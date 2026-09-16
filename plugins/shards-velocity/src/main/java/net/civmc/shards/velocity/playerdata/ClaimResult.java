@@ -1,7 +1,7 @@
 package net.civmc.shards.velocity.playerdata;
 
-import net.civmc.shards.api.PlayerLocation;
 import java.util.UUID;
+import net.civmc.shards.api.PlayerLocation;
 
 /**
  * Outcome of claiming ownership of a player's data.
