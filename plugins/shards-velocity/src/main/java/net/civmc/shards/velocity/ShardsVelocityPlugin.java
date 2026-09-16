@@ -8,39 +8,63 @@ import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.ProxyServer;
 import java.nio.file.Path;
+import java.util.LinkedHashSet;
 import java.util.Optional;
+import java.util.Set;
+import net.civmc.shards.api.ShardServerId;
 import net.civmc.shards.velocity.config.ShardsConfig;
 import net.civmc.shards.velocity.placement.ShardConnectionListener;
 import net.civmc.shards.velocity.placement.ShardPlacementService;
 import net.civmc.shards.velocity.playerdata.PlayerDataService;
+import org.slf4j.Logger;
 
 @Plugin(id = "shards", name = "Shards", version = "1.0.0", authors = {"Fier"})
 public final class ShardsVelocityPlugin {
 
     private final ProxyServer proxyServer;
+    private final Logger logger;
     private final Path dataDirectory;
     private final Injector injector;
     private ShardPlacementService shardPlacementService;
     private PlayerDataService playerDataService;
 
     @Inject
-    public ShardsVelocityPlugin(final ProxyServer proxyServer, @DataDirectory final Path dataDirectory,
-                                final Injector injector) {
+    public ShardsVelocityPlugin(final ProxyServer proxyServer, final Logger logger,
+                                @DataDirectory final Path dataDirectory, final Injector injector) {
         this.proxyServer = proxyServer;
+        this.logger = logger;
         this.dataDirectory = dataDirectory;
         this.injector = injector;
     }
 
     @Subscribe
     public void onProxyInitialization(final ProxyInitializeEvent event) {
+        final ShardsConfig shardsConfig = ShardsConfig.load(this.dataDirectory);
+        logServerIds(shardsConfig);
+
         // Child of Velocity's injector for this plugin, which already provides ProxyServer, PluginContainer, Logger
-        final Injector shardsInjector =
-            this.injector.createChildInjector(new ShardsModule(ShardsConfig.load(this.dataDirectory)));
+        final Injector shardsInjector = this.injector.createChildInjector(new ShardsModule(shardsConfig));
 
         this.proxyServer.getEventManager().register(this, shardsInjector.getInstance(ShardConnectionListener.class));
 
         this.shardPlacementService = shardsInjector.getInstance(ShardPlacementService.class);
         this.playerDataService = shardsInjector.getInstance(PlayerDataService.class);
+    }
+
+    /**
+     * The id a server owns player data under is derived from its name rather than configured, so an
+     * operator reading owning_server_uuid out of the database has nothing on hand to map it back to a
+     * server. Writing the mapping out once at startup gives them that.
+     */
+    private void logServerIds(final ShardsConfig shardsConfig) {
+        final Set<String> serverNames = new LinkedHashSet<>(shardsConfig.shards().keySet());
+        // The holding server is not a shard, but it owns a player's data while they are on it
+        if (!shardsConfig.holdingServer().isEmpty()) {
+            serverNames.add(shardsConfig.holdingServer());
+        }
+        for (final String serverName : serverNames) {
+            this.logger.info("Server {} owns player data as {}", serverName, ShardServerId.of(serverName));
+        }
     }
 
     /**

@@ -68,4 +68,16 @@ public interface PlayerDataStatements {
         WHERE player_uuid = :playerUuid AND owning_server_uuid IS NOT NULL
         """)
     int forceRelease(UUID playerUuid);
+
+    /**
+     * Drops every lock a server holds. Meant for a server that has just started and therefore has no
+     * players online, so any lock still recorded against it was left behind by its predecessor.
+     */
+    @Transaction
+    @SqlUpdate("""
+        UPDATE shard_player_data
+        SET owning_server_uuid = NULL
+        WHERE owning_server_uuid = :owningServerUuid
+        """)
+    int releaseAllForServer(UUID owningServerUuid);
 }

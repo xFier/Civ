@@ -15,6 +15,7 @@ include(":ansible")
 
 include(":libraries:name-api")
 include(":libraries:namelayer-sync")
+include(":libraries:shards-api")
 
 include(":plugins:announcements-velocity")
 include(":plugins:banstick-paper")

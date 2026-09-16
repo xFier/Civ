@@ -24,6 +24,9 @@ database:
 # same 0 is what makes the border seamless: no gap, and no block owned by both. Two
 # shards that do overlap are a startup error. Shards don't have to touch, though - blocks
 # owned by nobody are fine, and land there sends a player to the holding server.
+#
+# The key is the server name, and that name is also the identity the server owns player data
+# under - so renaming one here abandons every lock held under its old name.
 shards:
   main:
     - vertices: [{x: -10000, z: -10000}, {x: 0, z: -10000}, {x: 0, z: 10000}, {x: -10000, z: 10000}]

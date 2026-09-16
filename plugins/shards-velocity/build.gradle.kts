@@ -9,6 +9,7 @@ dependencies {
     annotationProcessor(libs.velocity.api)
 
     api(project(":libraries:name-api"))
+    api(project(":libraries:shards-api"))
     api(libs.configurate.yaml)
     api(libs.hikaricp)
     api(libs.mariadb.client)

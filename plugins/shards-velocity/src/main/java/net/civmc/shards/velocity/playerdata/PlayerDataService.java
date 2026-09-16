@@ -113,6 +113,20 @@ public final class PlayerDataService {
             statements -> statements.forceRelease(playerUuid) > 0);
     }
 
+    /**
+     * Clears every lock held by one server. Only safe when the caller knows that server has no
+     * players online - at its startup, where anything still held under its id belongs to the run
+     * before. At any other moment this hands a live player's data to a second writer.
+     *
+     * <p>Nothing is discarded: the stored payload stays whatever was last written back.</p>
+     *
+     * @return how many stale locks were cleared
+     */
+    public int releaseAllForServer(final UUID serverUuid) {
+        return this.jdbi.withExtension(PlayerDataStatements.class,
+            statements -> statements.releaseAllForServer(serverUuid));
+    }
+
     private static boolean isDuplicateKey(final UnableToExecuteStatementException exception) {
         // MariaDB reports 23000, H2 23505; both are the integrity-constraint class
         return exception.getCause() instanceof SQLException cause
