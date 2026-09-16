@@ -107,6 +107,7 @@ public final class PlayerDataListener implements Listener {
                 }
                 if (response.location() != null) {
                     this.pendingLocations.put(playerUuid, response.location());
+                    preloadArrival(response.location());
                 }
                 take(playerUuid);
             }
@@ -119,6 +120,32 @@ public final class PlayerDataListener implements Listener {
             default -> refuse(event, "unknown claim status " + response.status(), null);
         }
         this.preLoginDoneAt.put(playerUuid, System.nanoTime());
+    }
+
+    /**
+     * Starts loading the chunk the player is about to appear in.
+     *
+     * <p>Measured: reconfiguring the client takes 92-185ms, and putting the player into the world takes
+     * 308ms warm and about 1700ms cold. Nearly all of that second figure is the arrival chunk, and it
+     * is loaded while the player waits rather than before. Beginning it here spends the reconfiguring
+     * time on it instead, since the two have no reason to happen one after the other.</p>
+     *
+     * <p>Only a head start, not a guarantee: a chunk that has never been generated takes far longer
+     * than the reconfiguring it overlaps with. On a world that has been played in, which is the case
+     * that matters, loading one from disk is the shorter of the two.</p>
+     */
+    private void preloadArrival(final PlayerLocation location) {
+        final World world = Bukkit.getWorld(location.world());
+        if (world == null) {
+            return;
+        }
+        final int chunkX = (int) Math.floor(location.x()) >> 4;
+        final int chunkZ = (int) Math.floor(location.z()) >> 4;
+        // Off the login thread: this call belongs to the server thread, which then does the loading
+        // itself asynchronously. Nothing waits on the result - if it is not ready in time, placing the
+        // player loads it as it always did
+        Bukkit.getScheduler().runTask(this.plugin,
+            () -> world.getChunkAtAsync(chunkX, chunkZ, true, chunk -> { }));
     }
 
     @EventHandler
