@@ -62,6 +62,11 @@ public final class ShardsRequestConsumer implements AutoCloseable {
             this.connection = this.connectionFactory.newConnection("shards-velocity");
             this.channel = this.connection.createChannel();
             this.channel.basicQos(PREFETCH_COUNT);
+            // A reply addressed to a queue that has gone is otherwise discarded in silence, and the
+            // sender just waits out its timeout with nothing anywhere saying why
+            this.channel.addReturnListener(returned -> this.logger.error(
+                "A reply to {} could not be delivered: {}. The sender will time out",
+                returned.getRoutingKey(), returned.getReplyText()));
             for (final RequestHandler<?, ?> handler : this.handlers) {
                 consume(handler);
             }
@@ -138,7 +143,8 @@ public final class ShardsRequestConsumer implements AutoCloseable {
             .correlationId(requestProperties.getCorrelationId())
             .deliveryMode(1)
             .build();
-        this.channel.basicPublish("", requestProperties.getReplyTo(), responseProperties,
+        // mandatory, so an undeliverable reply comes back to the listener above rather than vanishing
+        this.channel.basicPublish("", requestProperties.getReplyTo(), true, responseProperties,
             GSON.toJson(response).getBytes(StandardCharsets.UTF_8));
     }
 

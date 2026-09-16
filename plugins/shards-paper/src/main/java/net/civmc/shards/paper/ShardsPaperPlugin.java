@@ -39,7 +39,8 @@ public final class ShardsPaperPlugin extends JavaPlugin {
             return;
         }
 
-        this.client = new ShardsClient(this.config.connectionFactory(), this, getLogger(), this::releaseStaleLocks);
+        this.client = new ShardsClient(this.config.connectionFactory(), this.config.serverName(), this, getLogger(),
+            this::releaseStaleLocks);
         this.client.start();
         this.owned = new OwnedPlayers(this.client, getLogger(), this.config.serverName());
 
