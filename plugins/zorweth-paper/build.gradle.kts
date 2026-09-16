@@ -11,6 +11,7 @@ dependencies {
     compileOnly(project(":plugins:bastion-paper"))
     compileOnly(project(":plugins:combattagplus-paper"))
     compileOnly(project(":plugins:namelayer-paper"))
+    compileOnly(project(":plugins:shards-paper"))
     compileOnly(project(":plugins:exilepearl-paper"))
     compileOnly(libs.luckperms.api)
     api(project(":libraries:name-api"))

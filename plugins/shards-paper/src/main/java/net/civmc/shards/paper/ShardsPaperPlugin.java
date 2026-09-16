@@ -1,5 +1,6 @@
 package net.civmc.shards.paper;
 
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import net.civmc.shards.api.ServerStartupRequest;
@@ -24,6 +25,7 @@ public final class ShardsPaperPlugin extends JavaPlugin {
     private ShardsPaperConfig config;
     private ShardsClient client;
     private OwnedPlayers owned;
+    private TransferService transfers;
     private final ShardBorder border = new ShardBorder();
 
     @Override
@@ -41,13 +43,13 @@ public final class ShardsPaperPlugin extends JavaPlugin {
         this.client.start();
         this.owned = new OwnedPlayers(this.client, getLogger(), this.config.serverName());
 
-        final TransferService transfers = new TransferService(this, this.client, this.owned, getLogger(),
+        this.transfers = new TransferService(this, this.client, this.owned, getLogger(),
             this.config.serverName(), this.config.failureMessage());
 
         getServer().getPluginManager().registerEvents(
             new PlayerDataListener(this, this.client, this.config.serverName(), this.config.failureMessage(),
                 this.owned), this);
-        getServer().getPluginManager().registerEvents(new ShardBorderListener(this.border, transfers), this);
+        getServer().getPluginManager().registerEvents(new ShardBorderListener(this.border, this.transfers), this);
         getCommand("shardsnapshot").setExecutor(new SnapshotVerifyCommand());
     }
 
@@ -65,6 +67,22 @@ public final class ShardsPaperPlugin extends JavaPlugin {
         if (this.client != null) {
             this.client.close();
         }
+    }
+
+    /**
+     * Moving a player to another shard, for other plugins.
+     *
+     * <p>Every reason for leaving a shard goes through the same thing - walking over a border, a
+     * rocket landing, an arrival - so that writing a player back, giving up ownership and moving them
+     * has one implementation rather than one per reason.</p>
+     *
+     * <p>State travels exactly as it is. A caller that wants a player to arrive without something has
+     * to take it off them first; that is a rule of whatever is moving them, not of the transfer.</p>
+     *
+     * @return empty until this plugin has enabled
+     */
+    public Optional<TransferService> getTransfers() {
+        return Optional.ofNullable(this.transfers);
     }
 
     /**

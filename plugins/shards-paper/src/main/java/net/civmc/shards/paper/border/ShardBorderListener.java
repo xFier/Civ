@@ -70,7 +70,7 @@ public final class ShardBorderListener implements Listener {
         // Cancelled either way. The player is held at the edge until the transfer answers, so they
         // cannot keep walking into ground this server is not authoritative for
         event.setCancelled(true);
-        this.transfers.transfer(event.getPlayer(), to);
+        this.transfers.transferTo(event.getPlayer(), to);
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -82,7 +82,7 @@ public final class ShardBorderListener implements Listener {
             if (passenger instanceof Player player) {
                 // The vehicle itself is left behind: it is an entity of this shard, and no snapshot
                 // carries one. Riding over a border dismounts you on the far side
-                this.transfers.transfer(player, event.getTo());
+                this.transfers.transferTo(player, event.getTo());
             }
         }
     }

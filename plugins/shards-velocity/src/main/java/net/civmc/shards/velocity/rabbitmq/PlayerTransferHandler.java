@@ -59,12 +59,14 @@ public final class PlayerTransferHandler implements RequestHandler<PlayerTransfe
 
     @Override
     public PlayerTransferResponse handle(final PlayerTransferRequest request) {
-        final Optional<String> destination = this.placementService.shardFor(request.targetLocation());
+        final Optional<String> destination = resolveDestination(request);
         if (destination.isEmpty()) {
-            // Not an error. Shards are allowed not to touch, so ground owned by nobody is a wall and
-            // the player simply stays where they are
+            // Not an error for a location: shards are allowed not to touch, so ground owned by nobody
+            // is a wall and the player simply stays where they are
             return PlayerTransferResponse.of(request.requestId(), TransferStatus.NO_DESTINATION,
-                "No shard owns that location");
+                request.targetShard() == null
+                    ? "No shard owns that location"
+                    : "No shard named " + request.targetShard());
         }
 
         final Optional<RegisteredServer> target = this.proxyServer.getServer(destination.get());
@@ -84,7 +86,9 @@ public final class PlayerTransferHandler implements RequestHandler<PlayerTransfe
         }
 
         // Written back and released before the connect, because the destination claims during its own
-        // pre-login and a lock still held there refuses the login outright
+        // pre-login and a lock still held there refuses the login outright.
+        // A shard-addressed transfer stores no location, so the destination places them with its own
+        // spawn logic rather than at a coordinate the sender had no way to choose
         final SaveResult saveResult = this.playerDataService.saveAndRelease(
             request.playerUuid(),
             ShardServerId.of(request.serverName()),
@@ -100,6 +104,17 @@ public final class PlayerTransferHandler implements RequestHandler<PlayerTransfe
         }
 
         return connect(request, player.get(), target.get(), destination.get());
+    }
+
+    private Optional<String> resolveDestination(final PlayerTransferRequest request) {
+        if (request.targetShard() != null) {
+            // Checked against the shard map rather than taken on trust, so a server cannot send
+            // someone to a name the proxy has never heard of
+            return this.placementService.isShard(request.targetShard())
+                ? Optional.of(request.targetShard())
+                : Optional.empty();
+        }
+        return this.placementService.shardFor(request.targetLocation());
     }
 
     private PlayerTransferResponse connect(final PlayerTransferRequest request, final Player player,
