@@ -8,6 +8,7 @@ import net.civmc.shards.api.ServerStartupResponse;
 import net.civmc.shards.paper.border.ArrivalCue;
 import net.civmc.shards.paper.border.BorderNotices;
 import net.civmc.shards.paper.border.BorderOutlook;
+import net.civmc.shards.paper.border.BorderView;
 import net.civmc.shards.paper.border.ShardBorder;
 import net.civmc.shards.paper.border.ShardBorderListener;
 import net.civmc.shards.paper.border.TransferService;
@@ -26,6 +27,9 @@ public final class ShardsPaperPlugin extends JavaPlugin {
     private static final long SHUTDOWN_DRAIN_SECONDS = 20L;
     private static final long SAVE_CHECK_TICKS = 20L;
     private static final int MAX_SAVES_PER_RUN = 4;
+    // Half a second: often enough that the particles look continuous and that a neighbour going down
+    // is noticed while the player is still stood at the border, rare enough to be nothing on a tick
+    private static final long BORDER_VIEW_TICKS = 10L;
     private static final long STARTUP_RETRY_MIN_TICKS = 20L * 5L;
     private static final long STARTUP_RETRY_MAX_TICKS = 20L * 60L;
 
@@ -55,8 +59,10 @@ public final class ShardsPaperPlugin extends JavaPlugin {
         this.owned = new OwnedPlayers(this.client, getLogger(), this.config.serverName());
 
         final BorderNotices notices = new BorderNotices();
+        final BorderOutlook outlook = new BorderOutlook(this.client, this.config.serverName(), getLogger());
+        final BorderView view = new BorderView(this.border, outlook);
         this.transfers = new TransferService(this, this.client, this.owned, getLogger(),
-            this.config.serverName(), this.config.failureMessage(), notices);
+            this.config.serverName(), this.config.failureMessage(), notices, view);
 
         final ArrivalCue arrivalCue = new ArrivalCue(this.config.arrivalTitle(), this.config.arrivalSubtitle());
         getServer().getPluginManager().registerEvents(
@@ -65,11 +71,11 @@ public final class ShardsPaperPlugin extends JavaPlugin {
         if (!arrivalCue.isConfigured()) {
             getLogger().info("No arrival title configured, so a crossing into this shard is unannounced");
         }
-        final BorderOutlook outlook = new BorderOutlook(this.client, this.config.serverName(), getLogger());
         getServer().getPluginManager().registerEvents(
             new ShardBorderListener(this.border, this.transfers, notices, outlook), this);
         getCommand("shardsnapshot").setExecutor(new SnapshotVerifyCommand());
         startPeriodicSave();
+        startBorderView(view);
     }
 
     @Override
@@ -105,6 +111,21 @@ public final class ShardsPaperPlugin extends JavaPlugin {
         getServer().getScheduler().runTaskTimer(this, () -> this.owned.checkpointDue(dueAfterNanos, MAX_SAVES_PER_RUN),
             SAVE_CHECK_TICKS, SAVE_CHECK_TICKS);
         getLogger().info("Writing players back every " + this.config.saveIntervalSeconds() + "s");
+    }
+
+    /**
+     * Keeps what players can see of the border up to date.
+     *
+     * <p>On a timer rather than on movement, because a border can change while somebody stands still:
+     * the shard beyond it going down turns a doorway into a wall without the player taking a step.
+     * The particles need repainting as they expire anyway.</p>
+     */
+    private void startBorderView(final BorderView view) {
+        getServer().getScheduler().runTaskTimer(this, () -> {
+            for (final Player player : Bukkit.getOnlinePlayers()) {
+                view.update(player);
+            }
+        }, BORDER_VIEW_TICKS, BORDER_VIEW_TICKS);
     }
 
     /**
