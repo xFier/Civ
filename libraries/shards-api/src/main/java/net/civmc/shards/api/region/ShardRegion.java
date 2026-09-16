@@ -1,4 +1,4 @@
-package net.civmc.shards.velocity.config;
+package net.civmc.shards.api.region;
 
 import java.util.List;
 import java.util.SortedSet;

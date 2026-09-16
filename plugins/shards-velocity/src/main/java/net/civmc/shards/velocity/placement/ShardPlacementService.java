@@ -7,11 +7,11 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import net.civmc.shards.velocity.config.ShardRegion;
+import net.civmc.shards.api.PlayerLocation;
+import net.civmc.shards.api.region.ShardRegion;
 import net.civmc.shards.velocity.config.ShardsConfig;
 import net.civmc.shards.velocity.database.PlayerDataRow;
 import net.civmc.shards.velocity.database.PlayerDataStatements;
-import net.civmc.shards.api.PlayerLocation;
 import org.jdbi.v3.core.Jdbi;
 
 /**
@@ -62,6 +62,13 @@ public final class ShardPlacementService {
         // map() already yields empty for a row that has never been written back, since its
         // location() is null then
         return playerDataRow.map(PlayerDataRow::location).flatMap(this::shardFor);
+    }
+
+    /**
+     * @return the areas that shard owns, empty if the named server is not a shard
+     */
+    public List<ShardRegion> regionsFor(final String serverName) {
+        return this.shardsConfig.shards().getOrDefault(serverName, List.of());
     }
 
     public boolean isShard(final String serverName) {

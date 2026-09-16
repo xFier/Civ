@@ -1,10 +1,13 @@
 package net.civmc.shards.velocity.rabbitmq;
 
+import java.util.List;
 import java.util.UUID;
+import net.civmc.shards.api.region.ShardRegion;
 import net.civmc.shards.api.ServerStartupRequest;
 import net.civmc.shards.api.ServerStartupResponse;
 import net.civmc.shards.api.ShardServerId;
 import net.civmc.shards.api.ShardsRabbitMqTopology;
+import net.civmc.shards.velocity.placement.ShardPlacementService;
 import net.civmc.shards.velocity.playerdata.PlayerDataService;
 import org.slf4j.Logger;
 
@@ -14,10 +17,13 @@ import org.slf4j.Logger;
 public final class ServerStartupHandler implements RequestHandler<ServerStartupRequest, ServerStartupResponse> {
 
     private final PlayerDataService playerDataService;
+    private final ShardPlacementService placementService;
     private final Logger logger;
 
-    public ServerStartupHandler(final PlayerDataService playerDataService, final Logger logger) {
+    public ServerStartupHandler(final PlayerDataService playerDataService,
+                                final ShardPlacementService placementService, final Logger logger) {
         this.playerDataService = playerDataService;
+        this.placementService = placementService;
         this.logger = logger;
     }
 
@@ -39,8 +45,12 @@ public final class ServerStartupHandler implements RequestHandler<ServerStartupR
     @Override
     public ServerStartupResponse handle(final ServerStartupRequest request) {
         final int released = this.playerDataService.releaseAllForServer(ShardServerId.of(request.serverName()));
-        this.logger.info("Released {} stale locks for server {}", released, request.serverName());
-        return ServerStartupResponse.success(request.requestId(), released);
+        // Its own areas travel with the answer, so a server learns where its edges are in the same
+        // round trip rather than reading a second copy of the shard map from its own config
+        final List<ShardRegion> regions = this.placementService.regionsFor(request.serverName());
+        this.logger.info("Released {} stale locks for server {}, which owns {} area(s)", released,
+            request.serverName(), regions.size());
+        return ServerStartupResponse.success(request.requestId(), released, regions);
     }
 
     @Override

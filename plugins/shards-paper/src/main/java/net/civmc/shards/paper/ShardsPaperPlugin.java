@@ -4,6 +4,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import net.civmc.shards.api.ServerStartupRequest;
 import net.civmc.shards.api.ServerStartupResponse;
+import net.civmc.shards.paper.border.ShardBorder;
+import net.civmc.shards.paper.border.ShardBorderListener;
+import net.civmc.shards.paper.border.TransferService;
 import net.civmc.shards.paper.config.ShardsPaperConfig;
 import net.civmc.shards.paper.playerdata.OwnedPlayers;
 import net.civmc.shards.paper.playerdata.PlayerDataListener;
@@ -21,6 +24,7 @@ public final class ShardsPaperPlugin extends JavaPlugin {
     private ShardsPaperConfig config;
     private ShardsClient client;
     private OwnedPlayers owned;
+    private final ShardBorder border = new ShardBorder();
 
     @Override
     public void onEnable() {
@@ -37,9 +41,13 @@ public final class ShardsPaperPlugin extends JavaPlugin {
         this.client.start();
         this.owned = new OwnedPlayers(this.client, getLogger(), this.config.serverName());
 
+        final TransferService transfers = new TransferService(this, this.client, this.owned, getLogger(),
+            this.config.serverName(), this.config.failureMessage());
+
         getServer().getPluginManager().registerEvents(
             new PlayerDataListener(this, this.client, this.config.serverName(), this.config.failureMessage(),
                 this.owned), this);
+        getServer().getPluginManager().registerEvents(new ShardBorderListener(this.border, transfers), this);
         getCommand("shardsnapshot").setExecutor(new SnapshotVerifyCommand());
     }
 
@@ -81,5 +89,14 @@ public final class ShardsPaperPlugin extends JavaPlugin {
         }
         getLogger().info("Released " + response.releasedLockCount() + " stale player data locks for "
             + this.config.serverName());
+
+        // The proxy is the only holder of the shard map, so the areas this server owns arrive with the
+        // startup answer rather than being configured a second time here
+        this.border.set(response.regions());
+        if (response.regions().isEmpty()) {
+            getLogger().info("This server owns no shard areas, so no border is enforced");
+        } else {
+            getLogger().info("Enforcing " + response.regions().size() + " shard area(s)");
+        }
     }
 }

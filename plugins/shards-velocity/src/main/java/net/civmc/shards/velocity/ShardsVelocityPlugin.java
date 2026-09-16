@@ -21,6 +21,7 @@ import net.civmc.shards.velocity.playerdata.PlayerDataService;
 import net.civmc.shards.velocity.rabbitmq.PlayerClaimHandler;
 import net.civmc.shards.velocity.rabbitmq.PlayerReleaseHandler;
 import net.civmc.shards.velocity.rabbitmq.PlayerSaveHandler;
+import net.civmc.shards.velocity.rabbitmq.PlayerTransferHandler;
 import net.civmc.shards.velocity.rabbitmq.ServerStartupHandler;
 import net.civmc.shards.velocity.rabbitmq.ShardsRequestConsumer;
 import org.slf4j.Logger;
@@ -60,10 +61,12 @@ public final class ShardsVelocityPlugin {
 
         this.requestConsumer = new ShardsRequestConsumer(shardsConfig.rabbitmq().connectionFactory(),
             List.of(
-                new ServerStartupHandler(this.playerDataService, this.logger),
+                new ServerStartupHandler(this.playerDataService, this.shardPlacementService, this.logger),
                 new PlayerClaimHandler(this.playerDataService, this.logger),
                 new PlayerSaveHandler(this.playerDataService, this.logger),
-                new PlayerReleaseHandler(this.playerDataService, this.logger)),
+                new PlayerReleaseHandler(this.playerDataService, this.logger),
+                new PlayerTransferHandler(this.playerDataService, this.shardPlacementService, this.proxyServer,
+                    this.logger)),
             this.proxyServer, this, this.logger);
         if (!this.requestConsumer.start()) {
             this.logger.warn("Shards could not start its request consumer; no server can reach its player data");
