@@ -8,6 +8,7 @@ dependencies {
     compileOnly(libs.velocity.api)
     annotationProcessor(libs.velocity.api)
 
+    api(project(":libraries:name-api"))
     api(libs.configurate.yaml)
     api(libs.hikaricp)
     api(libs.mariadb.client)

@@ -14,6 +14,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
 import net.civmc.shards.velocity.config.ShardsConfig;
+import net.civmc.shards.velocity.playerdata.PlayerDataService;
 import net.civmc.shards.velocity.route.PlayerIdResolver;
 import net.civmc.shards.velocity.route.RouteCommand;
 import net.civmc.shards.velocity.route.RouteListener;
@@ -27,6 +28,7 @@ public final class ShardsVelocityPlugin {
     private final Injector injector;
     private final PlayerIdResolver playerIdResolver;
     private RouteService routeService;
+    private PlayerDataService playerDataService;
 
     @Inject
     public ShardsVelocityPlugin(final ProxyServer proxyServer, @DataDirectory final Path dataDirectory,
@@ -53,6 +55,7 @@ public final class ShardsVelocityPlugin {
         commandManager.register(routeMeta, shards.getInstance(RouteCommand.class));
 
         this.routeService = shards.getInstance(RouteService.class);
+        this.playerDataService = shards.getInstance(PlayerDataService.class);
     }
 
     /**
@@ -60,6 +63,14 @@ public final class ShardsVelocityPlugin {
      */
     public Optional<RouteService> getRoutes() {
         return Optional.ofNullable(this.routeService);
+    }
+
+    /**
+     * Single-owner player data access for other plugins. Empty until this plugin has handled
+     * ProxyInitializeEvent.
+     */
+    public Optional<PlayerDataService> getPlayerData() {
+        return Optional.ofNullable(this.playerDataService);
     }
 
     public void setOfflinePlayerResolver(final Function<String, UUID> offlinePlayerResolver) {
