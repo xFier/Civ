@@ -4,6 +4,7 @@ import com.google.inject.Inject;
 import com.google.inject.Injector;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
+import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.ProxyServer;
@@ -16,6 +17,7 @@ import net.civmc.shards.velocity.config.ShardsConfig;
 import net.civmc.shards.velocity.placement.ShardConnectionListener;
 import net.civmc.shards.velocity.placement.ShardPlacementService;
 import net.civmc.shards.velocity.playerdata.PlayerDataService;
+import net.civmc.shards.velocity.rabbitmq.ServerStartupConsumer;
 import org.slf4j.Logger;
 
 @Plugin(id = "shards", name = "Shards", version = "1.0.0", authors = {"Fier"})
@@ -27,6 +29,7 @@ public final class ShardsVelocityPlugin {
     private final Injector injector;
     private ShardPlacementService shardPlacementService;
     private PlayerDataService playerDataService;
+    private ServerStartupConsumer serverStartupConsumer;
 
     @Inject
     public ShardsVelocityPlugin(final ProxyServer proxyServer, final Logger logger,
@@ -49,6 +52,20 @@ public final class ShardsVelocityPlugin {
 
         this.shardPlacementService = shardsInjector.getInstance(ShardPlacementService.class);
         this.playerDataService = shardsInjector.getInstance(PlayerDataService.class);
+
+        this.serverStartupConsumer = new ServerStartupConsumer(shardsConfig.rabbitmq().connectionFactory(),
+            this.playerDataService, this.proxyServer, this, this.logger);
+        if (!this.serverStartupConsumer.start()) {
+            this.logger.warn("Shards could not start its server startup consumer; stale locks will not be cleared");
+        }
+    }
+
+    @Subscribe
+    public void onProxyShutdown(final ProxyShutdownEvent event) {
+        // The database pool closes itself through the hook DatabaseModule registers when it opens it
+        if (this.serverStartupConsumer != null) {
+            this.serverStartupConsumer.close();
+        }
     }
 
     /**

@@ -1,0 +1,12 @@
+# The name this server is registered under in the proxy. It is also the identity this server owns
+# player data under, so it has to match the proxy's server list exactly - a name the proxy does not
+# know owns nothing, and a name belonging to another server owns that server's players.
+server-name: main
+
+# This server holds no database credentials. It reaches its player data by asking the proxy over
+# RabbitMQ, and the proxy is the only thing that reads or writes the store.
+rabbitmq:
+  user: guest
+  password: guest
+  host: localhost
+  port: 5672
