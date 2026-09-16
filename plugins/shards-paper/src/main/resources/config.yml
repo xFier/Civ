@@ -12,6 +12,15 @@ failure-message: "Unable to load your player data. Please reconnect and try agai
 # loses everything since they arrived. Set to 0 to turn it off.
 save-interval-seconds: 60
 
+# Shown to a player who crosses in from another shard. Their client has to leave play, rebuild its
+# registries and load terrain again - the same sequence as logging in, and it looks like it - so this
+# is what marks the moment as having walked somewhere rather than having been disconnected. It cannot
+# shorten the pause, which is Minecraft's own and about 370ms of it is unavoidable. MiniMessage
+# formatting. Leave both blank to show nothing.
+arrival:
+  title: ""
+  subtitle: ""
+
 # This server holds no database credentials. It reaches its player data by asking the proxy over
 # RabbitMQ, and the proxy is the only thing that reads or writes the store.
 rabbitmq:

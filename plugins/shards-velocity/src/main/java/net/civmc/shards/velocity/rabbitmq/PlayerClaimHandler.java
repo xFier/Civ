@@ -8,6 +8,7 @@ import net.civmc.shards.api.PlayerClaimResponse;
 import net.civmc.shards.api.ShardServerId;
 import net.civmc.shards.api.ShardsRabbitMqTopology;
 import net.civmc.shards.velocity.playerdata.ClaimResult;
+import net.civmc.shards.velocity.playerdata.InFlightTransfers;
 import net.civmc.shards.velocity.playerdata.PlayerDataService;
 import org.slf4j.Logger;
 
@@ -17,10 +18,13 @@ import org.slf4j.Logger;
 public final class PlayerClaimHandler implements RequestHandler<PlayerClaimRequest, PlayerClaimResponse> {
 
     private final PlayerDataService playerDataService;
+    private final InFlightTransfers inFlightTransfers;
     private final Logger logger;
 
-    public PlayerClaimHandler(final PlayerDataService playerDataService, final Logger logger) {
+    public PlayerClaimHandler(final PlayerDataService playerDataService,
+                              final InFlightTransfers inFlightTransfers, final Logger logger) {
         this.playerDataService = playerDataService;
+        this.inFlightTransfers = inFlightTransfers;
         this.logger = logger;
     }
 
@@ -43,10 +47,13 @@ public final class PlayerClaimHandler implements RequestHandler<PlayerClaimReque
     public PlayerClaimResponse handle(final PlayerClaimRequest request) {
         final ClaimResult result = this.playerDataService.claim(request.playerUuid(),
             ShardServerId.of(request.serverName()));
+        // Read whatever the outcome, so a refused claim does not leave the record to greet them on a
+        // later login that has nothing to do with a crossing
+        final boolean arriving = this.inFlightTransfers.consumeIsArriving(request.playerUuid());
         return switch (result) {
             case ClaimResult.Loaded loaded -> PlayerClaimResponse.loaded(request.requestId(),
                 loaded.payload() == null ? null : Base64.getEncoder().encodeToString(loaded.payload()),
-                loaded.location());
+                loaded.location(), arriving);
             case ClaimResult.NewPlayer ignored -> PlayerClaimResponse.newPlayer(request.requestId());
             case ClaimResult.HeldBy heldBy -> {
                 // Expected during a handover, when the server being left has not released yet. Logged

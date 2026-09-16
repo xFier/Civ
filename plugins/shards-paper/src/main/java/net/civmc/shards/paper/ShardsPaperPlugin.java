@@ -5,6 +5,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import net.civmc.shards.api.ServerStartupRequest;
 import net.civmc.shards.api.ServerStartupResponse;
+import net.civmc.shards.paper.border.ArrivalCue;
 import net.civmc.shards.paper.border.ShardBorder;
 import net.civmc.shards.paper.border.ShardBorderListener;
 import net.civmc.shards.paper.border.TransferService;
@@ -54,9 +55,13 @@ public final class ShardsPaperPlugin extends JavaPlugin {
         this.transfers = new TransferService(this, this.client, this.owned, getLogger(),
             this.config.serverName(), this.config.failureMessage());
 
+        final ArrivalCue arrivalCue = new ArrivalCue(this.config.arrivalTitle(), this.config.arrivalSubtitle());
         getServer().getPluginManager().registerEvents(
             new PlayerDataListener(this, this.client, this.config.serverName(), this.config.failureMessage(),
-                this.owned, this.transfers, () -> this.startupComplete), this);
+                this.owned, this.transfers, () -> this.startupComplete, arrivalCue), this);
+        if (!arrivalCue.isConfigured()) {
+            getLogger().info("No arrival title configured, so a crossing into this shard is unannounced");
+        }
         getServer().getPluginManager().registerEvents(new ShardBorderListener(this.border, this.transfers), this);
         getCommand("shardsnapshot").setExecutor(new SnapshotVerifyCommand());
         startPeriodicSave();
