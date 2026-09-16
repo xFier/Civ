@@ -1,6 +1,7 @@
 package net.civmc.shards.paper.playerdata;
 
 import java.util.Base64;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -8,6 +9,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import net.civmc.shards.api.PlayerCheckpointRequest;
 import net.civmc.shards.api.PlayerLocation;
 import net.civmc.shards.api.PlayerReleaseRequest;
 import net.civmc.shards.api.PlayerSaveRequest;
@@ -17,6 +19,7 @@ import net.civmc.shards.api.snapshot.PlayerSnapshot;
 import net.civmc.shards.api.snapshot.PlayerSnapshotCodec;
 import net.civmc.shards.paper.rabbitmq.ShardsClient;
 import net.civmc.shards.paper.snapshot.PlayerSnapshots;
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 
@@ -32,6 +35,7 @@ public final class OwnedPlayers {
     private final Logger logger;
     private final String serverName;
     private final Set<UUID> owned = ConcurrentHashMap.newKeySet();
+    private final Map<UUID, Long> lastWrittenAt = new ConcurrentHashMap<>();
     private final Set<CompletableFuture<?>> inFlight = ConcurrentHashMap.newKeySet();
 
     public OwnedPlayers(final ShardsClient client, final Logger logger, final String serverName) {
@@ -42,6 +46,9 @@ public final class OwnedPlayers {
 
     public void add(final UUID playerUuid) {
         this.owned.add(playerUuid);
+        // Counts as just written: they arrived with what the store already has, so there is nothing to
+        // checkpoint until they have played for a while
+        this.lastWrittenAt.put(playerUuid, System.nanoTime());
     }
 
     /**
@@ -51,6 +58,7 @@ public final class OwnedPlayers {
      */
     public void forget(final UUID playerUuid) {
         this.owned.remove(playerUuid);
+        this.lastWrittenAt.remove(playerUuid);
     }
 
     public boolean holds(final UUID playerUuid) {
@@ -69,6 +77,7 @@ public final class OwnedPlayers {
         if (!this.owned.remove(playerUuid)) {
             return;
         }
+        this.lastWrittenAt.remove(playerUuid);
         final PlayerSnapshot snapshot;
         final PlayerLocation location;
         try {
@@ -105,6 +114,70 @@ public final class OwnedPlayers {
                     this.logger.log(Level.SEVERE, "Could not release the abandoned login of " + playerUuid, error);
                 } else if (response.released()) {
                     this.logger.info("Released the lock on " + playerUuid + " after their login never completed");
+                }
+            }));
+    }
+
+    /**
+     * Writes back the players who are due, keeping ownership of them.
+     *
+     * <p>Data is otherwise only written when someone leaves or crosses a border, so a server that is
+     * killed rather than stopped loses everything since they arrived - they wake up wherever they last
+     * crossed, with whatever they had then. Minecraft autosaves players for the same reason.</p>
+     *
+     * <p>Called every second and bounded, rather than writing everyone on one tick every interval.
+     * Reading a player is tens of milliseconds, so a full server doing it all at once would be a
+     * visible stall on a fixed cycle - the worst kind to diagnose.</p>
+     *
+     * <p>Must run on the main thread: snapshots are read from live players.</p>
+     *
+     * @param dueAfterNanos how old a write has to be before it is redone
+     * @param maxPerRun the most players to write in one call
+     */
+    public void checkpointDue(final long dueAfterNanos, final int maxPerRun) {
+        final long now = System.nanoTime();
+        int written = 0;
+        for (final UUID playerUuid : this.owned) {
+            if (written >= maxPerRun) {
+                return;
+            }
+            final Long last = this.lastWrittenAt.get(playerUuid);
+            if (last != null && now - last < dueAfterNanos) {
+                continue;
+            }
+            final Player player = Bukkit.getPlayer(playerUuid);
+            if (player == null) {
+                // Owned but not here: a login that has not finished, or one that never will. The
+                // no-show timer deals with it; there is nothing to read from in the meantime
+                continue;
+            }
+            checkpoint(player);
+            written++;
+        }
+    }
+
+    private void checkpoint(final Player player) {
+        final UUID playerUuid = player.getUniqueId();
+        // Marked before the write, not after: a write that fails should not have every following run
+        // retry it immediately, and the next one is only a interval away
+        this.lastWrittenAt.put(playerUuid, System.nanoTime());
+        final String payload;
+        final PlayerLocation location;
+        try {
+            payload = Base64.getEncoder().encodeToString(
+                PlayerSnapshotCodec.toBytes(PlayerSnapshots.capture(player)));
+            location = toPlayerLocation(player.getLocation());
+        } catch (final RuntimeException exception) {
+            this.logger.log(Level.SEVERE, "Could not capture " + playerUuid + " for a checkpoint", exception);
+            return;
+        }
+        track(this.client.checkpoint(PlayerCheckpointRequest.create(this.serverName, playerUuid, payload, location))
+            .whenComplete((response, error) -> {
+                if (error != null) {
+                    this.logger.log(Level.SEVERE, "Could not checkpoint " + playerUuid, error);
+                } else if (response.status() != SaveStatus.SAVED) {
+                    this.logger.severe("Checkpoint of " + playerUuid + " was refused: " + response.status()
+                        + (response.heldBy() == null ? "" : " (held by " + response.heldBy() + ")"));
                 }
             }));
     }

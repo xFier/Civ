@@ -19,6 +19,7 @@ public final class ShardsRabbitMqTopology {
     public static final String PLAYER_SAVE_QUEUE = "shards.playerdata.save";
     public static final String PLAYER_RELEASE_QUEUE = "shards.playerdata.release";
     public static final String PLAYER_TRANSFER_QUEUE = "shards.playerdata.transfer";
+    public static final String PLAYER_CHECKPOINT_QUEUE = "shards.playerdata.checkpoint";
     public static final boolean PLAYER_QUEUE_DURABLE = true;
 
     public static final String REPLY_QUEUE_PREFIX = "shards.replies.";
