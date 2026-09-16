@@ -9,6 +9,13 @@ database:
   idle-timeout: 600000
   max-lifetime: 7200000
 
+# The proxy answers its servers over RabbitMQ; they hold no database credentials of their own.
+rabbitmq:
+  user: guest
+  password: guest
+  host: localhost
+  port: 5672
+
 # A shard owns blocks on the x/z plane; every world at those coordinates belongs to it.
 # Each area is a polygon given as its corners, in order. The ring closes on its own, so
 # don't repeat the first corner. A rectangle is just its four corners; give a shard made

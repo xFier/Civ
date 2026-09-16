@@ -1,0 +1,57 @@
+package net.civmc.shards.paper.config;
+
+import com.rabbitmq.client.ConnectionFactory;
+import java.util.Objects;
+import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.FileConfiguration;
+
+/**
+ * config.yml.
+ *
+ * @param serverName the name this server is registered under in the proxy, which is also the
+ *     identity it owns player data under
+ */
+public record ShardsPaperConfig(String serverName, String user, String password, String host, int port) {
+
+    public ShardsPaperConfig {
+        serverName = requireNonBlank(serverName, "server-name");
+        user = requireNonBlank(user, "rabbitmq.user");
+        password = password == null ? "" : password;
+        host = requireNonBlank(host, "rabbitmq.host");
+        if (port <= 0) {
+            throw new IllegalArgumentException("rabbitmq.port must be positive");
+        }
+    }
+
+    public static ShardsPaperConfig from(final FileConfiguration configuration) {
+        Objects.requireNonNull(configuration, "configuration");
+        final ConfigurationSection rabbitmq = configuration.getConfigurationSection("rabbitmq");
+        if (rabbitmq == null) {
+            throw new IllegalStateException("Missing rabbitmq config section");
+        }
+        return new ShardsPaperConfig(
+            configuration.getString("server-name"),
+            rabbitmq.getString("user", "guest"),
+            rabbitmq.getString("password", "guest"),
+            rabbitmq.getString("host", "localhost"),
+            rabbitmq.getInt("port", 5672));
+    }
+
+    public ConnectionFactory connectionFactory() {
+        final ConnectionFactory factory = new ConnectionFactory();
+        factory.setUsername(this.user);
+        factory.setPassword(this.password);
+        factory.setHost(this.host);
+        factory.setPort(this.port);
+        return factory;
+    }
+
+    private static String requireNonBlank(final String value, final String fieldName) {
+        Objects.requireNonNull(value, fieldName);
+        final String trimmed = value.trim();
+        if (trimmed.isEmpty()) {
+            throw new IllegalArgumentException(fieldName + " must not be blank");
+        }
+        return trimmed;
+    }
+}

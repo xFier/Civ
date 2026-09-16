@@ -24,12 +24,18 @@ public record ShardsConfig(
     Map<String, List<ShardRegion>> shards,
     String holdingServer,
     String failureMessage,
-    DatabaseConfig database
+    DatabaseConfig database,
+    RabbitMqConfig rabbitmq
 ) {
 
     public ShardsConfig {
         if (database == null) {
             throw new IllegalStateException("Missing database config section");
+        }
+        // Required, unlike an optional section: the servers reach their player data only through this
+        // proxy, so one that cannot answer them is not a degraded proxy, it is a proxy nobody can use
+        if (rabbitmq == null) {
+            throw new IllegalStateException("Missing rabbitmq config section");
         }
         // Absent keys arrive as null, so fall back to the previous defaults
         holdingServer = holdingServer == null ? "" : holdingServer.trim();

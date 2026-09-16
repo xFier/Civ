@@ -1,0 +1,5 @@
+name: Shards
+version: 1.0.0
+main: net.civmc.shards.paper.ShardsPaperPlugin
+author: Fier
+api-version: 1.21.11

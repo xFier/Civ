@@ -10,6 +10,7 @@ dependencies {
 
     api(project(":libraries:name-api"))
     api(project(":libraries:shards-api"))
+    api(libs.rabbitmq.client)
     api(libs.configurate.yaml)
     api(libs.hikaricp)
     api(libs.mariadb.client)
