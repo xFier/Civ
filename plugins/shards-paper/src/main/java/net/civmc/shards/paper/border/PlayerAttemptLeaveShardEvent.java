@@ -38,7 +38,9 @@ public final class PlayerAttemptLeaveShardEvent extends Event implements Cancell
     }
 
     /**
-     * @return where the player was trying to get to, which is what decides the shard they would land on
+     * @return where the player was trying to get to, or null when the destination is a named shard and
+     *     that server will decide where they appear - which is the case for an arrival rather than a
+     *     step across a border
      */
     public Location getTarget() {
         return this.target;

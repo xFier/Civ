@@ -1,8 +1,6 @@
 package net.civmc.zorweth;
 
 import com.devotedmc.ExilePearl.ExilePearlPlugin;
-import com.google.common.io.ByteArrayDataOutput;
-import com.google.common.io.ByteStreams;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.UUID;
@@ -11,6 +9,7 @@ import net.minelink.ctplus.CombatTagPlus;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
+import net.civmc.zorweth.transfer.ShardTransfers;
 import org.bukkit.Bukkit;
 import org.bukkit.HeightMap;
 import org.bukkit.Material;
@@ -30,7 +29,6 @@ import vg.civcraft.mc.civmodcore.inventory.gui.DecorationStack;
 
 public final class PioneerCommand implements CommandExecutor {
 
-    private static final long TRANSFER_TIMEOUT_TICKS = 150L;
     private static final int CONFIRM_SLOT = 11;
     private static final int INFO_SLOT = 13;
     private static final int CANCEL_SLOT = 15;
@@ -260,6 +258,21 @@ public final class PioneerCommand implements CommandExecutor {
             );
         }
 
+        // Kept so the player can be put back if the handover does not start. Emptying someone and
+        // then failing to move them is how inventories are lost, and the transfer can refuse
+        // for reasons this command cannot see - they are already being moved, or another plugin
+        // vetoed it
+        final ItemStack[] heldContents = player.getInventory().getContents().clone();
+        final int heldLevel = player.getLevel();
+        final float heldExp = player.getExp();
+        final int heldFood = player.getFoodLevel();
+        final float heldSaturation = player.getSaturation();
+        final float heldExhaustion = player.getExhaustion();
+        final int heldSlot = player.getInventory().getHeldItemSlot();
+
+        // Emptied before the handover, not by it. A pioneer arriving with nothing is a rule of
+        // pioneering - it is why they get a starter kit on the other side - so it is applied here,
+        // where it can be read and changed, rather than being a property of how players are moved
         player.getInventory().clear();
         if (player.getOpenInventory().getTopInventory() instanceof CraftingInventory inventory) {
             inventory.clear();
@@ -272,19 +285,23 @@ public final class PioneerCommand implements CommandExecutor {
         player.getInventory().setHeldItemSlot(0);
         player.getPersistentDataContainer().set(RocketTransferKeys.PIONEER, PersistentDataType.BOOLEAN, true);
         this.plugin.getStasisHandler().putInStasis(player);
-        connect(player, this.plugin.getDestinationServer());
-        Bukkit.getScheduler().runTaskLater(this.plugin, () -> {
-            final Player toKick = Bukkit.getPlayer(id);
-            if (toKick != null) {
-                toKick.kick(Component.text(this.plugin.getTransferFailureMessage(), NamedTextColor.RED));
-            }
-        }, TRANSFER_TIMEOUT_TICKS);
-    }
 
-    private void connect(final Player player, final String server) {
-        final ByteArrayDataOutput output = ByteStreams.newDataOutput();
-        output.writeUTF("Connect");
-        output.writeUTF(server);
-        player.sendPluginMessage(this.plugin, "BungeeCord", output.toByteArray());
+        // Addressed to the shard rather than a coordinate: a pioneer has no particular place to
+        // arrive at, and where they land is the destination's own spawn logic to decide
+        if (ShardTransfers.toShard(player, this.plugin.getDestinationServer())) {
+            return;
+        }
+
+        player.getInventory().setContents(heldContents);
+        player.setLevel(heldLevel);
+        player.setExp(heldExp);
+        player.setFoodLevel(heldFood);
+        player.setSaturation(heldSaturation);
+        player.setExhaustion(heldExhaustion);
+        player.getInventory().setHeldItemSlot(heldSlot);
+        player.getPersistentDataContainer().remove(RocketTransferKeys.PIONEER);
+        this.plugin.getStasisHandler().removeStasis(player);
+        player.sendMessage(Component.text("Unable to pioneer right now. Please try again shortly.",
+            NamedTextColor.RED));
     }
 }

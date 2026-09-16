@@ -56,19 +56,52 @@ public final class TransferService {
     }
 
     /**
-     * Sends a player to the shard owning {@code target}.
+     * Sends a player to the shard owning {@code target}, arriving at that exact place.
      *
      * <p>Must run on the main thread: the snapshot is read from a live player.</p>
      *
      * @return whether the transfer was started. False means the player stays exactly where they are
      */
-    public boolean transfer(final Player player, final Location target) {
+    public boolean transferTo(final Player player, final Location target) {
+        return start(player, toPlayerLocation(target), target, null);
+    }
+
+    /**
+     * Sends a player to a place on another shard, named by world and coordinates.
+     *
+     * <p>For a destination this server cannot express as a {@link Location} because the world belongs
+     * to the other shard and does not exist here.</p>
+     *
+     * <p>Must run on the main thread: the snapshot is read from a live player.</p>
+     */
+    public boolean transferTo(final Player player, final PlayerLocation target) {
+        return start(player, target, null, null);
+    }
+
+    /**
+     * Sends a player to a named shard, letting that server decide where they appear.
+     *
+     * <p>For an arrival with no meaningful coordinate to aim at - the destination's own spawn logic
+     * places them, as it does for anyone arriving there for the first time.</p>
+     *
+     * <p>The player's state travels exactly as it is. Anything that should not go with them has to be
+     * taken off them <strong>before</strong> this is called, so that stays a rule of whatever is
+     * moving them rather than something the transfer decides.</p>
+     *
+     * <p>Must run on the main thread: the snapshot is read from a live player.</p>
+     */
+    public boolean transferToShard(final Player player, final String shardName) {
+        return start(player, null, null, shardName);
+    }
+
+    private boolean start(final Player player, final PlayerLocation target, final Location localTarget,
+                          final String shardName) {
         final UUID playerUuid = player.getUniqueId();
         if (!this.inTransit.add(playerUuid)) {
             return false;
         }
 
-        final PlayerAttemptLeaveShardEvent event = new PlayerAttemptLeaveShardEvent(player, target);
+        final PlayerAttemptLeaveShardEvent event = new PlayerAttemptLeaveShardEvent(player, localTarget);
         Bukkit.getPluginManager().callEvent(event);
         if (event.isCancelled()) {
             this.inTransit.remove(playerUuid);
@@ -83,18 +116,15 @@ public final class TransferService {
             return false;
         }
 
-        final String payload;
-        final PlayerLocation targetLocation;
+        final PlayerTransferRequest request;
         try {
             final PlayerSnapshot snapshot = PlayerSnapshots.capture(player);
-            payload = Base64.getEncoder().encodeToString(PlayerSnapshotCodec.toBytes(snapshot));
-            targetLocation = toPlayerLocation(target);
+            final String payload = Base64.getEncoder().encodeToString(PlayerSnapshotCodec.toBytes(snapshot));
+            request = shardName == null
+                ? PlayerTransferRequest.toLocation(this.serverName, playerUuid, payload, target)
+                : PlayerTransferRequest.toShard(this.serverName, playerUuid, payload, shardName);
         } catch (final RuntimeException exception) {
-            this.logger.log(Level.SEVERE, "Could not capture " + playerUuid + " for transfer", exception);
-            this.inTransit.remove(playerUuid);
-            return false;
-        }
-        if (targetLocation == null) {
+            this.logger.log(Level.SEVERE, "Could not prepare a transfer for " + playerUuid, exception);
             this.inTransit.remove(playerUuid);
             return false;
         }
@@ -102,7 +132,7 @@ public final class TransferService {
         // Ownership is given up by the proxy as part of the transfer, so this server must stop
         // believing it holds them now - otherwise their quit would try to save over the destination
         this.owned.forget(playerUuid);
-        this.client.transfer(PlayerTransferRequest.create(this.serverName, playerUuid, payload, targetLocation))
+        this.client.transfer(request)
             // Back onto the main thread: the failure path kicks the player, and the transit set is
             // read by move handling that runs there
             .whenComplete((response, error) -> Bukkit.getScheduler().runTask(
