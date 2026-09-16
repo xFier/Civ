@@ -106,6 +106,7 @@ public final class ShardsClient implements AutoCloseable {
             this.channel.basicConsume(this.replyQueue, true, deliverCallback, consumerTag -> {
             });
             watchRecovery(this.connection);
+            watchBlocking(this.connection);
             this.ready = true;
         } catch (final ConnectException exception) {
             this.logger.warning("Retrying RabbitMQ connection");
@@ -143,6 +144,22 @@ public final class ShardsClient implements AutoCloseable {
                 ShardsClient.this.logger.warning("RabbitMQ connection lost, recovering");
             }
         });
+    }
+
+    /**
+     * Says so when the broker stops accepting anything this client publishes.
+     *
+     * <p>A resource alarm - the broker's disk or memory running low - blocks publishers rather than
+     * refusing them: the connection stays up, the request queues keep their consumers, and every call
+     * simply runs to its timeout. Without this the only symptom is everything quietly not working,
+     * which is indistinguishable from a bug in the plugin and was diagnosed once the hard way.</p>
+     */
+    private void watchBlocking(final Connection connection) {
+        connection.addBlockedListener(
+            reason -> this.logger.severe("RabbitMQ has blocked this connection (" + reason
+                + "). Nothing can be published until the broker's resource alarm clears - check its "
+                + "free disk space and memory. Logins, saves and transfers will time out until then"),
+            () -> this.logger.info("RabbitMQ has unblocked this connection; publishing resumes"));
     }
 
     public CompletableFuture<ServerStartupResponse> startup(final ServerStartupRequest request) {
