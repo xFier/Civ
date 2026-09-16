@@ -49,7 +49,7 @@ public final class ShardsPaperPlugin extends JavaPlugin {
 
         getServer().getPluginManager().registerEvents(
             new PlayerDataListener(this, this.client, this.config.serverName(), this.config.failureMessage(),
-                this.owned), this);
+                this.owned, this.transfers), this);
         getServer().getPluginManager().registerEvents(new ShardBorderListener(this.border, this.transfers), this);
         getCommand("shardsnapshot").setExecutor(new SnapshotVerifyCommand());
     }

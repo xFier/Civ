@@ -15,6 +15,7 @@ import net.civmc.shards.api.PlayerClaimResponse;
 import net.civmc.shards.api.PlayerLocation;
 import net.civmc.shards.api.snapshot.PlayerSnapshot;
 import net.civmc.shards.api.snapshot.PlayerSnapshotCodec;
+import net.civmc.shards.paper.border.TransferService;
 import net.civmc.shards.paper.rabbitmq.ShardsClient;
 import net.civmc.shards.paper.snapshot.PlayerSnapshots;
 import net.kyori.adventure.text.Component;
@@ -56,15 +57,18 @@ public final class PlayerDataListener implements Listener {
     private final Map<UUID, PlayerLocation> pendingLocations = new ConcurrentHashMap<>();
     private final Map<UUID, BukkitTask> joinTimeouts = new ConcurrentHashMap<>();
     private final OwnedPlayers owned;
+    private final TransferService transfers;
 
     public PlayerDataListener(final JavaPlugin plugin, final ShardsClient client, final String serverName,
-                              final String failureMessage, final OwnedPlayers owned) {
+                              final String failureMessage, final OwnedPlayers owned,
+                              final TransferService transfers) {
         this.plugin = plugin;
         this.client = client;
         this.logger = plugin.getLogger();
         this.serverName = serverName;
         this.failureMessage = Component.text(failureMessage);
         this.owned = owned;
+        this.transfers = transfers;
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
@@ -147,7 +151,10 @@ public final class PlayerDataListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onQuit(final PlayerQuitEvent event) {
+        // Does nothing for a player handed to another shard: ownership was given up when they were
+        // handed over, and saving again here would write over what they are doing now
         this.owned.saveAndRelease(event.getPlayer());
+        this.transfers.forget(event.getPlayer().getUniqueId());
     }
 
     private void take(final UUID playerUuid) {

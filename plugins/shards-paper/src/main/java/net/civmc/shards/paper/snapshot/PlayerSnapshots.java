@@ -2,6 +2,7 @@ package net.civmc.shards.paper.snapshot;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -39,6 +40,13 @@ import org.bukkit.potion.PotionEffectType;
  * anything left merged would be the old server's value surviving the move.</p>
  */
 public final class PlayerSnapshots {
+
+    // Worked out once. Asking for a block statistic about a non-block throws, and letting that happen
+    // across every material costs thousands of exceptions per pass - on the main thread, during a join
+    private static final List<Material> BLOCK_MATERIALS = Arrays.stream(Material.values())
+        .filter(Material::isBlock).toList();
+    private static final List<Material> ITEM_MATERIALS = Arrays.stream(Material.values())
+        .filter(Material::isItem).toList();
 
     private PlayerSnapshots() {
     }
@@ -259,15 +267,9 @@ public final class PlayerSnapshots {
             switch (statistic.getType()) {
                 case UNTYPED -> putIfNonZero(statistics, statistic.name(), null, player.getStatistic(statistic));
                 case BLOCK, ITEM -> {
-                    for (final Material material : Material.values()) {
-                        // Statistics reject a material of the wrong kind, and which materials are
-                        // blocks or items is not knowable from the statistic alone
-                        try {
-                            putIfNonZero(statistics, statistic.name(), material.name(),
-                                player.getStatistic(statistic, material));
-                        } catch (final IllegalArgumentException ignored) {
-                            // not a valid pairing
-                        }
+                    for (final Material material : materialsFor(statistic)) {
+                        putIfNonZero(statistics, statistic.name(), material.name(),
+                            player.getStatistic(statistic, material));
                     }
                 }
                 case ENTITY -> {
@@ -312,8 +314,8 @@ public final class PlayerSnapshots {
             switch (statistic.getType()) {
                 case UNTYPED -> player.setStatistic(statistic, 0);
                 case BLOCK, ITEM -> {
-                    for (final Material material : Material.values()) {
-                        setQuietly(() -> player.setStatistic(statistic, material, 0));
+                    for (final Material material : materialsFor(statistic)) {
+                        player.setStatistic(statistic, material, 0);
                     }
                 }
                 case ENTITY -> {
@@ -347,6 +349,10 @@ public final class PlayerSnapshots {
                 player.setStatistic(statistic, Material.valueOf(qualifier), value);
             }
         });
+    }
+
+    private static List<Material> materialsFor(final Statistic statistic) {
+        return statistic.getType() == Statistic.Type.BLOCK ? BLOCK_MATERIALS : ITEM_MATERIALS;
     }
 
     private static void setQuietly(final Runnable action) {

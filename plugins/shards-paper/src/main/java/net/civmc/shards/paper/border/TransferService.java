@@ -61,6 +61,18 @@ public final class TransferService {
     }
 
     /**
+     * Forgets a player who has left, whether they were handed over or disconnected on the way.
+     *
+     * <p>This is what ends a successful handover: the answer comes back before the player's connection
+     * actually moves, so they are held in transit until they are gone rather than from a reply that
+     * only means their data arrived.</p>
+     */
+    public void forget(final UUID playerUuid) {
+        this.inTransit.remove(playerUuid);
+        this.removedVehicles.remove(playerUuid);
+    }
+
+    /**
      * Sends a player to the shard owning {@code target}, arriving at that exact place.
      *
      * <p>Must run on the main thread: the snapshot is read from a live player.</p>
@@ -157,9 +169,9 @@ public final class TransferService {
     }
 
     private void complete(final UUID playerUuid, final PlayerTransferResponse response, final Throwable error) {
-        this.inTransit.remove(playerUuid);
         final Player player = Bukkit.getPlayer(playerUuid);
         if (error != null) {
+            this.inTransit.remove(playerUuid);
             putVehicleBack(playerUuid, player);
             failed(playerUuid, player, "the proxy could not be reached", error);
             return;
@@ -167,8 +179,12 @@ public final class TransferService {
         if (response.status() == TransferStatus.TRANSFERRED) {
             // It travelled in the payload and the destination rebuilds it there
             this.removedVehicles.remove(playerUuid);
+            // Still in transit until they actually go. The answer arrives before the connection is
+            // handed over, so they keep moving here for a moment - and clearing it now would let those
+            // moves start a second handover for a player this server has already given up
             return;
         }
+        this.inTransit.remove(playerUuid);
         if (response.status() == TransferStatus.NO_DESTINATION) {
             // Ground owned by nobody. A valid configuration, so the edge is a wall: they stay, still
             // owned here, and nothing was written
