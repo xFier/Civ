@@ -3,3 +3,12 @@ version: 1.0.0
 main: net.civmc.shards.paper.ShardsPaperPlugin
 author: Fier
 api-version: 1.21.11
+commands:
+  shardsnapshot:
+    description: Check that your player state survives a snapshot round trip unchanged
+    usage: /shardsnapshot
+    permission: shards.admin
+permissions:
+  shards.admin:
+    description: Shards diagnostics
+    default: op

@@ -5,6 +5,7 @@ import net.civmc.shards.api.ServerStartupRequest;
 import net.civmc.shards.api.ServerStartupResponse;
 import net.civmc.shards.paper.config.ShardsPaperConfig;
 import net.civmc.shards.paper.rabbitmq.ShardsClient;
+import net.civmc.shards.paper.snapshot.SnapshotVerifyCommand;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class ShardsPaperPlugin extends JavaPlugin {
@@ -25,6 +26,8 @@ public final class ShardsPaperPlugin extends JavaPlugin {
 
         this.client = new ShardsClient(this.config.connectionFactory(), this, getLogger(), this::releaseStaleLocks);
         this.client.start();
+
+        getCommand("shardsnapshot").setExecutor(new SnapshotVerifyCommand());
     }
 
     @Override
