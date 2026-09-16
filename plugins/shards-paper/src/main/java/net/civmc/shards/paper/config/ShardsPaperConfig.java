@@ -11,15 +11,20 @@ import org.bukkit.configuration.file.FileConfiguration;
  * @param serverName the name this server is registered under in the proxy, which is also the
  *     identity it owns player data under
  * @param failureMessage what a player is told when their data cannot be claimed or restored
+ * @param saveIntervalSeconds how often a player who is still playing is written back. Zero turns it
+ *     off, which means a server that is killed rather than stopped loses everything since they arrived
  */
-public record ShardsPaperConfig(String serverName, String failureMessage, String user, String password,
-                                String host, int port) {
+public record ShardsPaperConfig(String serverName, String failureMessage, int saveIntervalSeconds,
+                                String user, String password, String host, int port) {
 
     public ShardsPaperConfig {
         serverName = requireNonBlank(serverName, "server-name");
         failureMessage = failureMessage == null || failureMessage.isBlank()
             ? "Unable to load your player data. Please reconnect and try again."
             : failureMessage;
+        if (saveIntervalSeconds < 0) {
+            throw new IllegalArgumentException("save-interval-seconds must not be negative");
+        }
         user = requireNonBlank(user, "rabbitmq.user");
         password = password == null ? "" : password;
         host = requireNonBlank(host, "rabbitmq.host");
@@ -37,6 +42,7 @@ public record ShardsPaperConfig(String serverName, String failureMessage, String
         return new ShardsPaperConfig(
             configuration.getString("server-name"),
             configuration.getString("failure-message"),
+            configuration.getInt("save-interval-seconds", 60),
             rabbitmq.getString("user", "guest"),
             rabbitmq.getString("password", "guest"),
             rabbitmq.getString("host", "localhost"),

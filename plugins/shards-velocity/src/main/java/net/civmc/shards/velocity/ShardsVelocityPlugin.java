@@ -18,6 +18,7 @@ import net.civmc.shards.velocity.config.ShardsConfig;
 import net.civmc.shards.velocity.placement.ShardConnectionListener;
 import net.civmc.shards.velocity.placement.ShardPlacementService;
 import net.civmc.shards.velocity.playerdata.PlayerDataService;
+import net.civmc.shards.velocity.rabbitmq.PlayerCheckpointHandler;
 import net.civmc.shards.velocity.rabbitmq.PlayerClaimHandler;
 import net.civmc.shards.velocity.rabbitmq.PlayerReleaseHandler;
 import net.civmc.shards.velocity.rabbitmq.PlayerSaveHandler;
@@ -64,6 +65,7 @@ public final class ShardsVelocityPlugin {
                 new ServerStartupHandler(this.playerDataService, this.shardPlacementService, this.logger),
                 new PlayerClaimHandler(this.playerDataService, this.logger),
                 new PlayerSaveHandler(this.playerDataService, this.logger),
+                new PlayerCheckpointHandler(this.playerDataService, this.logger),
                 new PlayerReleaseHandler(this.playerDataService, this.logger),
                 new PlayerTransferHandler(this.playerDataService, this.shardPlacementService, this.proxyServer,
                     this.logger)),

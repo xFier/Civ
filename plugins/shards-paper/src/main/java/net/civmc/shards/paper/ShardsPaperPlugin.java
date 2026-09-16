@@ -21,6 +21,8 @@ import org.bukkit.plugin.java.JavaPlugin;
 public final class ShardsPaperPlugin extends JavaPlugin {
 
     private static final long SHUTDOWN_DRAIN_SECONDS = 20L;
+    private static final long SAVE_CHECK_TICKS = 20L;
+    private static final int MAX_SAVES_PER_RUN = 4;
 
     private ShardsPaperConfig config;
     private ShardsClient client;
@@ -52,6 +54,7 @@ public final class ShardsPaperPlugin extends JavaPlugin {
                 this.owned, this.transfers), this);
         getServer().getPluginManager().registerEvents(new ShardBorderListener(this.border, this.transfers), this);
         getCommand("shardsnapshot").setExecutor(new SnapshotVerifyCommand());
+        startPeriodicSave();
     }
 
     @Override
@@ -68,6 +71,25 @@ public final class ShardsPaperPlugin extends JavaPlugin {
         if (this.client != null) {
             this.client.close();
         }
+    }
+
+    /**
+     * Writes back the players who are due, once a second.
+     *
+     * <p>Every second rather than once an interval, writing only those actually due and a few at a
+     * time. Reading a player costs tens of milliseconds, so writing everyone on one tick would be a
+     * stall that arrives on a fixed cycle - which looks like the server hitching for no reason.</p>
+     */
+    private void startPeriodicSave() {
+        if (this.config.saveIntervalSeconds() <= 0) {
+            getLogger().warning("Periodic saving is off: anything since a player arrived is lost if this "
+                + "server is killed rather than stopped");
+            return;
+        }
+        final long dueAfterNanos = TimeUnit.SECONDS.toNanos(this.config.saveIntervalSeconds());
+        getServer().getScheduler().runTaskTimer(this, () -> this.owned.checkpointDue(dueAfterNanos, MAX_SAVES_PER_RUN),
+            SAVE_CHECK_TICKS, SAVE_CHECK_TICKS);
+        getLogger().info("Writing players back every " + this.config.saveIntervalSeconds() + "s");
     }
 
     /**

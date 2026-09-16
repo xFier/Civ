@@ -22,6 +22,8 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import net.civmc.shards.api.PlayerCheckpointRequest;
+import net.civmc.shards.api.PlayerCheckpointResponse;
 import net.civmc.shards.api.PlayerClaimRequest;
 import net.civmc.shards.api.PlayerClaimResponse;
 import net.civmc.shards.api.PlayerReleaseRequest;
@@ -156,6 +158,11 @@ public final class ShardsClient implements AutoCloseable {
     public CompletableFuture<PlayerSaveResponse> save(final PlayerSaveRequest request) {
         return publish(ShardsRabbitMqTopology.PLAYER_SAVE_QUEUE, request.requestId(), request,
             PlayerSaveResponse.class);
+    }
+
+    public CompletableFuture<PlayerCheckpointResponse> checkpoint(final PlayerCheckpointRequest request) {
+        return publish(ShardsRabbitMqTopology.PLAYER_CHECKPOINT_QUEUE, request.requestId(), request,
+            PlayerCheckpointResponse.class);
     }
 
     public CompletableFuture<PlayerTransferResponse> transfer(final PlayerTransferRequest request) {

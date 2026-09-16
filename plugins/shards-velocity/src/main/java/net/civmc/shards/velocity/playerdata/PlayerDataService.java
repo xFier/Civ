@@ -89,17 +89,48 @@ public final class PlayerDataService {
             if (updated > 0) {
                 return new SaveResult.Success();
             }
-            // Nothing matched, so re-read to say why rather than returning a bare failure
-            final Optional<PlayerDataRow> row = statements.select(playerUuid);
-            final SaveResult result;
-            if (row.isEmpty()) {
-                result = new SaveResult.NoRow();
-            } else if (row.get().owningServerUuid() == null) {
-                result = new SaveResult.NotHeld();
-            } else {
-                result = new SaveResult.HeldByOther(row.get().owningServerUuid());
+            return describeFailure(statements, playerUuid);
+        });
+    }
+
+    /**
+     * Re-reads the row to say why a write matched nothing, rather than returning a bare failure. The
+     * difference between nobody holding the lock and somebody else holding it is the difference
+     * between a tidy-up and two servers believing they own the same player.
+     */
+    private static SaveResult describeFailure(final PlayerDataStatements statements, final UUID playerUuid) {
+        final Optional<PlayerDataRow> row = statements.select(playerUuid);
+        if (row.isEmpty()) {
+            return new SaveResult.NoRow();
+        }
+        if (row.get().owningServerUuid() == null) {
+            return new SaveResult.NotHeld();
+        }
+        return new SaveResult.HeldByOther(row.get().owningServerUuid());
+    }
+
+    /**
+     * Writes a player's state back while they carry on playing, keeping ownership.
+     *
+     * <p>Reports the same outcomes as {@link #saveAndRelease}, because the same thing can be wrong: if
+     * this server no longer holds the lock, nothing is written and it needs to know.</p>
+     */
+    public SaveResult checkpoint(final UUID playerUuid, final UUID serverUuid, final byte[] payload,
+                                 final PlayerLocation location) {
+        return this.jdbi.inTransaction(handle -> {
+            final PlayerDataStatements statements = handle.attach(PlayerDataStatements.class);
+            final int updated = statements.checkpoint(
+                playerUuid,
+                serverUuid,
+                payload,
+                location == null ? null : location.world(),
+                location == null ? null : location.x(),
+                location == null ? null : location.y(),
+                location == null ? null : location.z());
+            if (updated > 0) {
+                return new SaveResult.Success();
             }
-            return result;
+            return describeFailure(statements, playerUuid);
         });
     }
 

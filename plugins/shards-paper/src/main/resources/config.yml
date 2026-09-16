@@ -7,6 +7,11 @@ server-name: main
 # on whatever this server happens to have on disk, because that would be someone else's stale copy.
 failure-message: "Unable to load your player data. Please reconnect and try again."
 
+# How often a player who is still playing is written back, in seconds. Their data is otherwise only
+# stored when they leave or cross a border, so a server that is killed rather than stopped cleanly
+# loses everything since they arrived. Set to 0 to turn it off.
+save-interval-seconds: 60
+
 # This server holds no database credentials. It reaches its player data by asking the proxy over
 # RabbitMQ, and the proxy is the only thing that reads or writes the store.
 rabbitmq:

@@ -58,6 +58,20 @@ public interface PlayerDataStatements {
                        Double x, Double y, Double z);
 
     /**
+     * Writes the payload back and <strong>keeps</strong> ownership, for a player who is still playing.
+     * The owner predicate is the same safety property as {@link #saveAndRelease}: a server that does
+     * not hold the lock updates nothing.
+     */
+    @Transaction
+    @SqlUpdate("""
+        UPDATE shard_player_data
+        SET payload = :payload, world = :world, x = :x, y = :y, z = :z
+        WHERE player_uuid = :playerUuid AND owning_server_uuid = :owningServerUuid
+        """)
+    int checkpoint(UUID playerUuid, UUID owningServerUuid, byte[] payload, String world,
+                   Double x, Double y, Double z);
+
+    /**
      * Drops ownership without writing a payload. For stale locks left by a server that died while
      * holding one; the automatic recovery path needs the Paper side and does not exist yet.
      */
