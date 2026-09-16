@@ -135,8 +135,11 @@ public final class TransferService {
 
         final PlayerTransferRequest request;
         final VehicleSnapshot vehicle;
+        final long capturedAt;
+        final long startedAt = System.nanoTime();
         try {
             final PlayerSnapshot snapshot = PlayerSnapshots.captureForTransfer(player);
+            capturedAt = System.nanoTime();
             vehicle = snapshot.vehicle();
             final String payload = Base64.getEncoder().encodeToString(PlayerSnapshotCodec.toBytes(snapshot));
             request = shardName == null
@@ -164,7 +167,12 @@ public final class TransferService {
             // Back onto the main thread: the failure path kicks the player, and the transit set is
             // read by move handling that runs there
             .whenComplete((response, error) -> Bukkit.getScheduler().runTask(
-                this.plugin, () -> complete(playerUuid, response, error)));
+                this.plugin, () -> {
+                    this.logger.info(String.format(
+                        "Transfer of %s: captured in %dms, proxy answered after %dms",
+                        playerUuid, millis(startedAt, capturedAt), millis(capturedAt, System.nanoTime())));
+                    complete(playerUuid, response, error);
+                }));
         return true;
     }
 
@@ -234,6 +242,10 @@ public final class TransferService {
         // Whether the save went through is exactly what is unknown here, so this server must not keep
         // playing them: a second copy would write over the one the proxy may already hold
         player.kick(this.failureMessage);
+    }
+
+    static long millis(final long fromNanos, final long toNanos) {
+        return (toNanos - fromNanos) / 1_000_000L;
     }
 
     private static PlayerLocation toPlayerLocation(final Location location) {

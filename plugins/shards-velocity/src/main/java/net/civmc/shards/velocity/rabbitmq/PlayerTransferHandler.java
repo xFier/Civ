@@ -59,6 +59,7 @@ public final class PlayerTransferHandler implements RequestHandler<PlayerTransfe
 
     @Override
     public PlayerTransferResponse handle(final PlayerTransferRequest request) {
+        final long receivedAt = System.nanoTime();
         final Optional<String> destination = resolveDestination(request);
         if (destination.isEmpty()) {
             // Not an error for a location: shards are allowed not to touch, so ground owned by nobody
@@ -106,7 +107,10 @@ public final class PlayerTransferHandler implements RequestHandler<PlayerTransfe
         // Started, not waited for. The destination claims the player during its own pre-login, which
         // is a request this same consumer has to answer - so blocking here until the connect finishes
         // is waiting for a message that cannot be delivered until we stop waiting
+        final long savedAt = System.nanoTime();
         beginConnect(request, player.get(), target.get(), destination.get());
+        this.logger.info("Handed {} to {}: saved and released in {}ms", request.playerUuid(), destination.get(),
+            (savedAt - receivedAt) / 1_000_000L);
         return PlayerTransferResponse.transferred(request.requestId(), destination.get());
     }
 

@@ -74,6 +74,7 @@ public final class PlayerDataListener implements Listener {
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onPreLogin(final AsyncPlayerPreLoginEvent event) {
         final UUID playerUuid = event.getUniqueId();
+        final long askedAt = System.nanoTime();
         final PlayerClaimResponse response;
         try {
             response = this.client.claim(PlayerClaimRequest.create(this.serverName, playerUuid))
@@ -86,6 +87,9 @@ public final class PlayerDataListener implements Listener {
             refuse(event, "could not reach the proxy to claim player data", exception);
             return;
         }
+
+        this.logger.info(String.format("Claim of %s answered in %dms (%s)", playerUuid,
+            elapsedMillis(askedAt), response.status()));
 
         switch (response.status()) {
             case LOADED -> {
@@ -144,8 +148,11 @@ public final class PlayerDataListener implements Listener {
         if (snapshot == null) {
             return;
         }
+        final long restoreStartedAt = System.nanoTime();
         try {
             PlayerSnapshots.restore(player, snapshot);
+            this.logger.info(String.format("Restored %s in %dms", playerUuid,
+                elapsedMillis(restoreStartedAt)));
             // A tick later: the join tick sends the player their position, which discards any velocity
             // set during it, and gliding is refused until the elytra from the restore above is on
             Bukkit.getScheduler().runTask(this.plugin, () -> {
@@ -167,6 +174,10 @@ public final class PlayerDataListener implements Listener {
         // handed over, and saving again here would write over what they are doing now
         this.owned.saveAndRelease(event.getPlayer());
         this.transfers.forget(event.getPlayer().getUniqueId());
+    }
+
+    private static long elapsedMillis(final long fromNanos) {
+        return (System.nanoTime() - fromNanos) / 1_000_000L;
     }
 
     private void take(final UUID playerUuid) {
