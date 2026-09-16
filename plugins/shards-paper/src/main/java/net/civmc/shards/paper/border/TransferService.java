@@ -193,14 +193,22 @@ public final class TransferService {
             return;
         }
         this.inTransit.remove(playerUuid);
-        if (response.status() == TransferStatus.NO_DESTINATION) {
-            // Ground owned by nobody. A valid configuration, so the edge is a wall: they stay, still
-            // owned here, and nothing was written
+        putVehicleBack(playerUuid, player);
+
+        // Every one of these is refused before anything is written, so the player is untouched and
+        // still owned here. The edge simply does not let them through this time - ground owned by
+        // nobody, a shard that is not answering, or a save the proxy would not make
+        if (response.status() == TransferStatus.NO_DESTINATION
+            || response.status() == TransferStatus.DESTINATION_UNAVAILABLE
+            || response.status() == TransferStatus.SAVE_REFUSED) {
             this.owned.add(playerUuid);
-            putVehicleBack(playerUuid, player);
+            this.logger.warning("Kept " + playerUuid + " here: " + response.status() + " ("
+                + response.failureMessage() + ")");
             return;
         }
-        putVehicleBack(playerUuid, player);
+
+        // ERROR only. Whether the save landed is exactly what is unknown, so this server must not
+        // carry on playing them - a second copy would write over one the proxy may already hold
         failed(playerUuid, player, response.status() + ": " + response.failureMessage(), null);
     }
 
