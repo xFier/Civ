@@ -149,6 +149,18 @@ public final class ShardBorder {
         return Math.max(distanceAcross, distanceAlong) <= radius;
     }
 
+    /**
+     * Whether a whole chunk lies outside every area this server owns.
+     *
+     * <p>One block decides it. Shard edges are required to fall on chunk boundaries, so no chunk is
+     * ever split between two shards and every block in it gives the same answer. Everything about the
+     * mirror rests on that: it has to ask one shard for a chunk, and a chunk with two owners has no
+     * one shard to ask.</p>
+     */
+    public boolean isChunkOutside(final int chunkX, final int chunkZ) {
+        return isOutside(chunkX << 4, chunkZ << 4);
+    }
+
     public boolean isOutside(final int blockX, final int blockZ) {
         final List<ShardRegion> owned = this.regions.get();
         if (owned.isEmpty()) {

@@ -18,6 +18,7 @@ import net.civmc.shards.paper.border.ShardRespawnListener;
 import net.civmc.shards.paper.border.TransferService;
 import net.civmc.shards.paper.config.ShardsPaperConfig;
 import net.civmc.shards.paper.mirror.ChunkStateProvider;
+import net.civmc.shards.paper.mirror.MirrorRepairListener;
 import net.civmc.shards.paper.mirror.MirrorView;
 import net.civmc.shards.paper.mirror.UnownedEntityView;
 import net.civmc.shards.paper.mirror.UnownedGroundListener;
@@ -185,6 +186,9 @@ public final class ShardsPaperPlugin extends JavaPlugin {
         final MirrorView mirror = new MirrorView(this, this.border, outlook, this.client,
             this.config.serverName(), getLogger(), getServer().getViewDistance());
         getServer().getPluginManager().registerEvents(mirror, this);
+        // A refused placement makes the client correct itself to what is really there, which for
+        // another shard's ground is this server's own copy - so the mirror has to be drawn again
+        getServer().getPluginManager().registerEvents(new MirrorRepairListener(this, mirror), this);
         getServer().getScheduler().runTaskTimer(this, () -> {
             for (final Player player : Bukkit.getOnlinePlayers()) {
                 mirror.update(player);

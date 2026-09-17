@@ -26,10 +26,6 @@ import org.bukkit.World;
  */
 public final class ChunkStateProvider {
 
-    // Every fourth block in each direction. Enough to notice any notch worth drawing, and 16 tests
-    // rather than 256 for a question asked of every chunk near a border
-    private static final int OWNERSHIP_SAMPLE_STEP = 4;
-
     private final ShardBorder border;
 
     public ChunkStateProvider(final ShardBorder border) {
@@ -47,7 +43,7 @@ public final class ChunkStateProvider {
             return CompletableFuture.failedFuture(
                 new IllegalArgumentException("No world named " + worldName + " on this server"));
         }
-        if (!ownsAnyOf(chunkX, chunkZ)) {
+        if (!ownsChunk(chunkX, chunkZ)) {
             return CompletableFuture.failedFuture(
                 new IllegalArgumentException("This shard owns no part of chunk " + chunkX + ", " + chunkZ));
         }
@@ -59,24 +55,13 @@ public final class ChunkStateProvider {
     }
 
     /**
-     * Whether any of this chunk belongs to us. Sampled rather than exhaustive - a chunk straddles a
-     * border often enough to matter, but a shard area narrower than four blocks is not a thing anyone
-     * is going to draw.
+     * Whether this chunk belongs to us. One test, not a scan: shard edges fall on chunk boundaries, so
+     * a chunk is never split and every block in it answers the same.
      */
-    private boolean ownsAnyOf(final int chunkX, final int chunkZ) {
-        if (!this.border.isConfigured()) {
-            // No areas means this server is not a shard at all - the holding server is the usual case -
-            // and it owns everywhere as far as the border is concerned
-            return true;
-        }
-        for (int x = 0; x < 16; x += OWNERSHIP_SAMPLE_STEP) {
-            for (int z = 0; z < 16; z += OWNERSHIP_SAMPLE_STEP) {
-                if (!this.border.isOutside((chunkX << 4) + x, (chunkZ << 4) + z)) {
-                    return true;
-                }
-            }
-        }
-        return false;
+    private boolean ownsChunk(final int chunkX, final int chunkZ) {
+        // No areas means this server is not a shard at all - the holding server is the usual case -
+        // and it owns everywhere as far as the border is concerned
+        return !this.border.isConfigured() || !this.border.isChunkOutside(chunkX, chunkZ);
     }
 
     private static ChunkState toState(final ChunkSnapshot snapshot, final int minHeight, final int maxHeight) {

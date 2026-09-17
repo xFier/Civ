@@ -21,6 +21,14 @@ rabbitmq:
 # don't repeat the first corner. A rectangle is just its four corners; give a shard made
 # of disjoint pieces several areas.
 #
+# Every coordinate must be a multiple of 16, so that each edge falls on a chunk boundary and a
+# chunk belongs to exactly one shard. A chunk is the unit of lighting, heightmaps, entity storage,
+# ticking and the packet a chunk is sent to a client in, so a border through the middle of one means
+# two servers disagreeing about the same ground - and it leaves a chunk with two owners, which the
+# mirror cannot draw truthfully because there is no single shard to ask for it. A coordinate that is
+# not a multiple of 16 is refused at startup rather than rounded: snapping would move ownership of
+# real ground without anyone saying so.
+#
 # Edges must run along an axis, so corners alternate between moving in x and moving in z.
 # Write a border that looks diagonal as the steps it really is - blocks are axis-aligned,
 # so that is what it would be anyway, and spelling it out means the boundary is what you
