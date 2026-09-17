@@ -52,6 +52,20 @@ sky-sync-seconds: 5
 # its rate. Set to false to go back to the old behaviour while judging that.
 hide-unowned-entities: true
 
+# Whether this server shows what the neighbouring shard really has on the ground past the border.
+#
+# Every shard's world starts as a copy of the same map, so unmodified ground matches exactly - which
+# is why the terrain is continuous across a border. What does not match is everything built since:
+# those blocks live on the shard that owns them and are absent from this server's copy, and the gap
+# grows for as long as the map lives. Without this, standing at a border a year in means looking at
+# empty hills where there is a city.
+#
+# The neighbour is asked for the chunk as it really is, and the difference against this server's own
+# copy is sent to players as block changes. Nothing is written: the mirrored blocks never enter this
+# server's world, so no plugin can find them and nothing out there can be reinforced, counted, broken
+# or picked up. The border stays exactly as impermeable as it was - this only changes what is drawn.
+mirror-chunks: true
+
 # What the border between shards is drawn with, where a player can see one.
 #
 #   particles  coloured dust, repainted twice a second. Nothing exists in the world between passes,

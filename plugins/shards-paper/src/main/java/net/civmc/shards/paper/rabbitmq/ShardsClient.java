@@ -23,6 +23,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import net.civmc.shards.api.BorderProbeRequest;
+import net.civmc.shards.api.ChunkStateRequest;
+import net.civmc.shards.api.ChunkStateResponse;
 import net.civmc.shards.api.NightSkipRequest;
 import net.civmc.shards.api.NightSkipResponse;
 import net.civmc.shards.api.BorderProbeResponse;
@@ -217,6 +219,19 @@ public final class ShardsClient implements AutoCloseable {
     public CompletableFuture<NightSkipResponse> skipNight(final NightSkipRequest request) {
         return publish(ShardsRabbitMqTopology.NIGHT_SKIP_QUEUE, request.requestId(), request,
             NightSkipResponse.class);
+    }
+
+    /**
+     * Asks the shard that owns a chunk what is really in it.
+     *
+     * <p>Addressed to that shard rather than to the proxy, which is the only message here that is:
+     * the proxy holds the shard map but not a world, so it can say whose chunk it is and nothing
+     * more.</p>
+     */
+    public CompletableFuture<ChunkStateResponse> chunkState(final String targetServer,
+                                                            final ChunkStateRequest request) {
+        return publish(ShardsRabbitMqTopology.mirrorQueue(targetServer), request.requestId(), request,
+            ChunkStateResponse.class);
     }
 
     public CompletableFuture<PlayerReleaseResponse> release(final PlayerReleaseRequest request) {

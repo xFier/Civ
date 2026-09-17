@@ -76,10 +76,24 @@ public final class BorderOutlook {
      * different answers, and asking for them separately would be a message per block per player.</p>
      */
     public void refresh(final Collection<EdgeSighting> faces) {
+        final List<ShardPoint> blocks = new ArrayList<>(faces.size());
+        for (final EdgeSighting face : faces) {
+            blocks.add(new ShardPoint(face.outsideX(), face.outsideZ()));
+        }
+        refreshBlocks(blocks);
+    }
+
+    /**
+     * The same, for callers that are not looking at a border face.
+     *
+     * <p>The mirror asks about whole chunks rather than about the blocks beside an edge, and it is the
+     * same question with the same answer, so it shares the same cache and the same round trip.</p>
+     */
+    public void refreshBlocks(final Collection<ShardPoint> blocks) {
         final long now = System.nanoTime();
         final List<ShardPoint> asking = new ArrayList<>();
-        for (final EdgeSighting face : faces) {
-            final long key = key(face.outsideX(), face.outsideZ());
+        for (final ShardPoint block : blocks) {
+            final long key = key(block.x(), block.z());
             final Known entry = this.known.get(key);
             if (entry != null && now - entry.askedAtNanos() < FRESH_FOR_NANOS) {
                 continue;
@@ -87,7 +101,7 @@ public final class BorderOutlook {
             // Marked as asked before the request goes out, keeping any previous answer in place.
             // Otherwise every pass taken while one probe is in flight would start another
             this.known.put(key, new Known(entry == null ? null : entry.beyond(), now));
-            asking.add(new ShardPoint(face.outsideX(), face.outsideZ()));
+            asking.add(block);
             if (asking.size() == BorderProbeRequest.MAX_BLOCKS) {
                 break;
             }
