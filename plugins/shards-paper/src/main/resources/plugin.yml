@@ -2,6 +2,9 @@ name: Shards
 version: 1.0.0
 main: net.civmc.shards.paper.ShardsPaperPlugin
 author: Fier
+# Soft, not hard: everything except showing players across a border works without it, and a shard
+# that loses the mirror is far better than one that will not start
+softdepend: [packetevents]
 api-version: 1.21.11
 commands:
   shardsnapshot:

@@ -19,11 +19,13 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import net.civmc.shards.api.ChunkStateRequest;
 import net.civmc.shards.api.ChunkStateResponse;
 import net.civmc.shards.api.ChunkUpdateMessage;
+import net.civmc.shards.api.PlayerPositionMessage;
 import net.civmc.shards.api.ShardsRabbitMqTopology;
 import net.civmc.shards.api.mirror.ChunkStateCodec;
 import net.civmc.shards.paper.mirror.ChunkStateProvider;
@@ -61,13 +63,15 @@ public final class ShardsServer implements AutoCloseable {
     private final ChunkStateProvider chunks;
     private final MirrorMetrics metrics;
     private final Consumer<ChunkUpdateMessage> updates;
+    private final Consumer<PlayerPositionMessage> positions;
     private volatile boolean closed;
     private Connection connection;
     private Channel channel;
 
     public ShardsServer(final ConnectionFactory connectionFactory, final String serverName,
                         final JavaPlugin plugin, final Logger logger, final ChunkStateProvider chunks,
-                        final MirrorMetrics metrics, final Consumer<ChunkUpdateMessage> updates) {
+                        final MirrorMetrics metrics, final Consumer<ChunkUpdateMessage> updates,
+                        final Consumer<PlayerPositionMessage> positions) {
         this.connectionFactory = connectionFactory;
         this.serverName = serverName;
         this.plugin = plugin;
@@ -75,6 +79,7 @@ public final class ShardsServer implements AutoCloseable {
         this.chunks = chunks;
         this.metrics = metrics;
         this.updates = updates;
+        this.positions = positions;
     }
 
     public boolean start() {
@@ -101,7 +106,10 @@ public final class ShardsServer implements AutoCloseable {
             this.channel.basicConsume(ShardsRabbitMqTopology.mirrorQueue(this.serverName), false,
                 deliverCallback, consumerTag -> {
                 });
-            consumeUpdates();
+            consumeAnnouncements(ShardsRabbitMqTopology.MIRROR_UPDATE_EXCHANGE, ChunkUpdateMessage.class,
+                ChunkUpdateMessage::serverName, this.updates);
+            consumeAnnouncements(ShardsRabbitMqTopology.MIRROR_PLAYER_EXCHANGE, PlayerPositionMessage.class,
+                PlayerPositionMessage::serverName, this.positions);
             this.logger.info("Answering chunk requests from other shards on "
                 + ShardsRabbitMqTopology.mirrorQueue(this.serverName));
             return true;
@@ -125,20 +133,21 @@ public final class ShardsServer implements AutoCloseable {
      * it - which is what we want, since an announcement held for a server that is not running would
      * arrive after that server had already re-read the chunk.</p>
      */
-    private void consumeUpdates() throws IOException {
-        this.channel.exchangeDeclare(ShardsRabbitMqTopology.MIRROR_UPDATE_EXCHANGE, "fanout", false);
+    private <T> void consumeAnnouncements(final String exchange, final Class<T> type,
+                                          final Function<T, String> sender, final Consumer<T> handler)
+        throws IOException {
+        this.channel.exchangeDeclare(exchange, "fanout", false);
         final String queue = this.channel.queueDeclare().getQueue();
-        this.channel.queueBind(queue, ShardsRabbitMqTopology.MIRROR_UPDATE_EXCHANGE, "");
+        this.channel.queueBind(queue, exchange, "");
         this.channel.basicConsume(queue, true, (consumerTag, delivery) -> {
             try {
-                final ChunkUpdateMessage update = GSON.fromJson(
-                    new String(delivery.getBody(), StandardCharsets.UTF_8), ChunkUpdateMessage.class);
-                if (update != null && !update.serverName().equals(this.serverName)) {
+                final T message = GSON.fromJson(new String(delivery.getBody(), StandardCharsets.UTF_8), type);
+                if (message != null && !sender.apply(message).equals(this.serverName)) {
                     // Our own announcements come back to us, because a fanout goes to everybody
-                    this.updates.accept(update);
+                    handler.accept(message);
                 }
             } catch (final RuntimeException exception) {
-                this.logger.log(Level.FINE, "Dropping a malformed mirror update", exception);
+                this.logger.log(Level.FINE, "Dropping a malformed announcement on " + exchange, exception);
             }
         }, consumerTag -> {
         });
