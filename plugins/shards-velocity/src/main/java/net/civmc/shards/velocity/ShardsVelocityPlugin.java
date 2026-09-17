@@ -28,7 +28,10 @@ import net.civmc.shards.velocity.rabbitmq.PlayerReleaseHandler;
 import net.civmc.shards.velocity.rabbitmq.PlayerSaveHandler;
 import net.civmc.shards.velocity.rabbitmq.PlayerTransferHandler;
 import net.civmc.shards.velocity.rabbitmq.ServerStartupHandler;
+import net.civmc.shards.velocity.rabbitmq.NightSkipHandler;
 import net.civmc.shards.velocity.rabbitmq.ShardsRequestConsumer;
+import net.civmc.shards.velocity.rabbitmq.SkyStateHandler;
+import net.civmc.shards.velocity.sky.SkyService;
 import org.slf4j.Logger;
 
 @Plugin(id = "shards", name = "Shards", version = "1.0.0", authors = {"Fier"})
@@ -64,6 +67,10 @@ public final class ShardsVelocityPlugin {
         this.shardPlacementService = shardsInjector.getInstance(ShardPlacementService.class);
         this.playerDataService = shardsInjector.getInstance(PlayerDataService.class);
 
+        // One clock and one weather for the network, so a crossing does not take a player from noon
+        // into a thunderstorm while the ground stays continuous
+        final SkyService skyService = SkyService.fromWallClock();
+
         // Shared by the two handlers that between them make a crossing tellable from a login: the
         // transfer writes the record and the claim that follows reads it
         final InFlightTransfers inFlightTransfers = new InFlightTransfers();
@@ -76,7 +83,9 @@ public final class ShardsVelocityPlugin {
                 new PlayerReleaseHandler(this.playerDataService, this.logger),
                 new PlayerTransferHandler(this.playerDataService, this.shardPlacementService,
                     inFlightTransfers, this.proxyServer, this.logger),
-                new BorderProbeHandler(this.shardPlacementService, this.proxyServer, this.logger)),
+                new BorderProbeHandler(this.shardPlacementService, this.proxyServer, this.logger),
+                new SkyStateHandler(skyService),
+                new NightSkipHandler(skyService, this.logger)),
             this.proxyServer, this, this.logger);
         if (!this.requestConsumer.start()) {
             this.logger.warn("Shards could not start its request consumer; no server can reach its player data");
