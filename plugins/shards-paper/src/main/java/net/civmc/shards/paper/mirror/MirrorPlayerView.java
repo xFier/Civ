@@ -47,7 +47,7 @@ import org.bukkit.event.player.PlayerQuitEvent;
  * not reach in any plausible lifetime. A collision would mean the client attaching somebody else's
  * movement to a real entity.</p>
  */
-public final class MirrorPlayerView implements Listener {
+public final class MirrorPlayerView implements Listener, MirrorPlayers {
 
     // What a client is shown of a player, and roughly their own tracking range. Beyond this they are
     // removed rather than left standing, so somebody who walked away does not remain frozen in a field
@@ -70,6 +70,7 @@ public final class MirrorPlayerView implements Listener {
     /**
      * Applies one announcement. Main thread.
      */
+    @Override
     public void apply(final PlayerPositionMessage message) {
         if (!available()) {
             return;
@@ -94,6 +95,7 @@ public final class MirrorPlayerView implements Listener {
      * Takes away anybody who has stopped being announced - they walked out of range of every border,
      * disconnected, or their shard went down. Main thread, on a timer.
      */
+    @Override
     public void expire() {
         if (!available()) {
             return;
