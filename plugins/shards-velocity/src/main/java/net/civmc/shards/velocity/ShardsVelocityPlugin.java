@@ -16,7 +16,9 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import net.civmc.shards.api.ShardServerId;
 import net.civmc.shards.velocity.config.ShardsConfig;
+import com.velocitypowered.api.command.CommandManager;
 import net.civmc.shards.velocity.placement.ShardConnectionListener;
+import net.civmc.shards.velocity.presence.NetworkListCommand;
 import net.civmc.shards.velocity.placement.ShardPlacementService;
 import net.civmc.shards.velocity.playerdata.InFlightTransfers;
 import net.civmc.shards.velocity.playerdata.PlayerDataService;
@@ -91,6 +93,24 @@ public final class ShardsVelocityPlugin {
             this.logger.warn("Shards could not start its request consumer; no server can reach its player data");
         }
         startLockExpiry(shardsConfig);
+        registerNetworkList(shardsConfig);
+    }
+
+    /**
+     * Takes {@code /list} off the shards and answers it here.
+     *
+     * <p>A shard's own list knows only the people on it, so a network spread evenly across shards
+     * reads as several half-empty servers - the opposite of what the borders are for. The proxy
+     * already knows every player and where each one is, so this needs nothing asked and nothing kept
+     * in sync.</p>
+     */
+    private void registerNetworkList(final ShardsConfig shardsConfig) {
+        if (!shardsConfig.networkList()) {
+            return;
+        }
+        final CommandManager commandManager = this.proxyServer.getCommandManager();
+        commandManager.register(commandManager.metaBuilder("list").plugin(this).build(),
+            new NetworkListCommand(this.proxyServer, dataOwningServers(shardsConfig)));
     }
 
     /**
