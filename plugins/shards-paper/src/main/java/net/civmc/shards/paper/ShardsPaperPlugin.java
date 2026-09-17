@@ -60,6 +60,7 @@ public final class ShardsPaperPlugin extends JavaPlugin {
     // Long, because what is written is only a head start: everything saved is read again from its owner
     // the first time anybody looks at it, so a save that is an hour out of date costs nothing
     private static final long MIRROR_SAVE_TICKS = 20L * 60L * 5L;
+    private static final long MIRROR_FORGET_TICKS = 20L * 60L * 5L;
     private static final long STARTUP_RETRY_MIN_TICKS = 20L * 5L;
     private static final long STARTUP_RETRY_MAX_TICKS = 20L * 60L;
 
@@ -282,6 +283,10 @@ public final class ShardsPaperPlugin extends JavaPlugin {
                 mirror.update(player);
             }
         }, MIRROR_TICKS, MIRROR_TICKS);
+        // Nothing else ever removes a chunk from the mirror, so without this there is one entry for
+        // every chunk of border anybody has ever stood at, for as long as the server runs
+        getServer().getScheduler().runTaskTimer(this, mirror::forgetWhatNobodyIsLookingAt,
+            MIRROR_FORGET_TICKS, MIRROR_FORGET_TICKS);
         // What the mirror costs is not visible from anywhere else, and the two numbers it reports -
         // how long a chunk takes to read, and how many blocks really differ - are what decide whether
         // this survives a busy border

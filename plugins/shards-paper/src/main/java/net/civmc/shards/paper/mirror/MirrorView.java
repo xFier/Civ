@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -65,6 +66,10 @@ public final class MirrorView implements Listener {
     // seconds for a player standing still, to find nothing. Long now, because the only thing it has to
     // catch is an announcement that never arrived
     private static final long FRESH_FOR_NANOS = TimeUnit.MINUTES.toNanos(10L);
+    // How long a chunk nobody has been near is kept. Generous on purpose: this is not an optimisation,
+    // it is the only thing stopping one entry per chunk of border the server has ever had somebody
+    // stand at, held for as long as it runs and written to disk every five minutes along with it
+    private static final long KEEP_UNSEEN_FOR_NANOS = TimeUnit.HOURS.toNanos(1L);
 
     private final JavaPlugin plugin;
     private final ShardBorder border;
@@ -87,6 +92,9 @@ public final class MirrorView implements Listener {
     // when a chunk leaves their range, because their client discards it and will be sent this
     // server's own version again if they come back
     private final Map<UUID, Set<ChunkKey>> shown = new ConcurrentHashMap<>();
+    // When somebody was last near each chunk, which is not the same as when it was last read: a border
+    // nobody visits is re-read every ten minutes for as long as anyone is in range and then never again
+    private final Map<ChunkKey, Long> lastNearby = new ConcurrentHashMap<>();
 
     public MirrorView(final JavaPlugin plugin, final ShardBorder border, final BorderOutlook outlook,
                       final ShardsClient client, final String serverName, final Logger logger,
@@ -131,6 +139,7 @@ public final class MirrorView implements Listener {
                 final ShardPoint foreignBlock = new ShardPoint(chunkX << 4, chunkZ << 4);
                 final ChunkKey key = new ChunkKey(world.getName(), chunkX, chunkZ);
                 inRange.add(key);
+                this.lastNearby.put(key, System.nanoTime());
                 show(viewer, key, foreignBlock, askingWhoOwns);
             }
         }
@@ -441,6 +450,42 @@ public final class MirrorView implements Listener {
     }
 
     /**
+     * Drops the chunks nobody has been near for an hour.
+     *
+     * <p>Without this there is one entry for every chunk of border anybody has ever stood at, kept for
+     * as long as the server runs and written to disk with the rest every five minutes. A player who
+     * walks a long border once leaves it there forever.</p>
+     *
+     * <p>It costs a chunk read when somebody comes back, which is the cheap half of the mirror and
+     * happens under a second. It also makes the saved file self-limiting: what is restored and then
+     * never visited is dropped within the hour and is not written again.</p>
+     */
+    public void forgetWhatNobodyIsLookingAt() {
+        final long now = System.nanoTime();
+        int dropped = 0;
+        final Iterator<Map.Entry<ChunkKey, Mirrored>> chunks = this.mirrored.entrySet().iterator();
+        while (chunks.hasNext()) {
+            final ChunkKey key = chunks.next().getKey();
+            final Long nearby = this.lastNearby.get(key);
+            if (nearby != null && now - nearby <= KEEP_UNSEEN_FOR_NANOS) {
+                continue;
+            }
+            // Not while it is being read: the fetch would install itself back into an entry that has
+            // just been dropped, and the picture would be there with nothing recording that anybody
+            // had asked for it
+            if (this.inFlight.contains(key)) {
+                continue;
+            }
+            chunks.remove();
+            this.lastNearby.remove(key);
+            dropped++;
+        }
+        if (dropped > 0) {
+            this.logger.fine("Forgot " + dropped + " mirrored chunk(s) nobody has been near for an hour");
+        }
+    }
+
+    /**
      * Puts back what was saved from the last run, before anybody is online.
      *
      * <p>Every chunk comes back marked to be read again, so what is restored is shown at once and then
@@ -468,6 +513,10 @@ public final class MirrorView implements Listener {
                 continue;
             }
             blocksRestored += blocks.size();
+            // Treated as though somebody had just been there, so an hour of nobody going near it has
+            // to pass before it is dropped - rather than the first sweep throwing away everything that
+            // was just loaded
+            this.lastNearby.put(new ChunkKey(chunk.world(), chunk.x(), chunk.z()), System.nanoTime());
             // Nothing has been shown to anybody yet, so there is nothing to put back to our own copy
             // and send is simply the difference
             this.mirrored.put(new ChunkKey(chunk.world(), chunk.x(), chunk.z()),
