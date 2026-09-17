@@ -18,7 +18,6 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import net.civmc.shards.api.PlayerPositionMessage;
 import net.civmc.shards.api.mirror.MirrorPlayer;
 import org.bukkit.Bukkit;
@@ -41,9 +40,9 @@ import org.bukkit.event.player.PlayerQuitEvent;
  * safeguard bolted on, it is the whole construction: an arrow shot at one of these passes through
  * because there is nothing there to stop it, and the border refuses the arrow at the edge anyway.</p>
  *
- * <p>Entity ids are taken from the top of the range downwards, where the server's own counter will
- * not reach in any plausible lifetime. A collision would mean the client attaching somebody else's
- * movement to a real entity.</p>
+ * <p>Entity ids come from {@link FakeEntityIds}, which is shared with everything else that draws
+ * something not really here: two counters both starting at the top of the range would hand the same
+ * ids to both, a collision between two things each carefully avoiding one with the server.</p>
  *
  * <p><strong>No entity metadata is sent, and that is not an oversight.</strong> The obvious thing to
  * send is which skin layers to draw - without it the outer layer, the hat and jacket, is missing. It
@@ -62,8 +61,6 @@ public final class MirrorPlayerView implements Listener, MirrorPlayers {
     // around in it
     private static final long FORGET_AFTER_NANOS = TimeUnit.SECONDS.toNanos(3L);
 
-    // Downwards from the top, far from anything the server will assign
-    private final AtomicInteger nextEntityId = new AtomicInteger(Integer.MAX_VALUE - 1);
     // viewer -> the players they are being shown, and under what id
     private final Map<UUID, Map<UUID, Ghost>> ghosts = new ConcurrentHashMap<>();
     // Everyone recently announced, so one that stops being mentioned can be taken away
@@ -138,7 +135,7 @@ public final class MirrorPlayerView implements Listener, MirrorPlayers {
     }
 
     private void spawn(final Player viewer, final Map<UUID, Ghost> theirs, final MirrorPlayer subject) {
-        final int entityId = this.nextEntityId.getAndDecrement();
+        final int entityId = FakeEntityIds.next();
         theirs.put(subject.uuid(), new Ghost(entityId));
 
         // The profile is what gives them their skin and their name tag. Sent even though the proxy

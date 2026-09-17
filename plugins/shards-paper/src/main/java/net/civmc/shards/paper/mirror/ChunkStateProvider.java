@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import net.civmc.shards.api.mirror.ChunkSectionState;
+import net.civmc.shards.api.mirror.MirroredEntity;
 import net.civmc.shards.api.mirror.ChunkState;
 import net.civmc.shards.paper.border.ShardBorder;
 import org.bukkit.Bukkit;
@@ -39,14 +40,14 @@ public final class ChunkStateProvider {
      * @param buildNanos turning the snapshot into sections. Real work, off the main thread
      */
     public record ChunkRead(ChunkState state, long waitNanos, long buildNanos, String publisherId,
-                            long revision) {
+                            long revision, List<MirroredEntity> entities) {
     }
 
     /**
      * A snapshot and the announcement number in force when it was taken, read together on the main
      * thread so nothing can be announced between the two. See {@link ChunkRevisions}.
      */
-    private record Taken(ChunkSnapshot snapshot, long revision) {
+    private record Taken(ChunkSnapshot snapshot, long revision, List<MirroredEntity> entities) {
     }
 
     /**
@@ -71,13 +72,14 @@ public final class ChunkStateProvider {
             // is all the main thread should be asked to do for somebody else's rendering. The
             // announcement number is read here too, because taken anywhere else it could be a number
             // either side of this snapshot rather than the one that matches it
-            .thenApply(chunk -> new Taken(chunk.getChunkSnapshot(), this.revisions.current(key)))
+            .thenApply(chunk -> new Taken(chunk.getChunkSnapshot(), this.revisions.current(key),
+                StillEntities.in(chunk)))
             .thenApplyAsync(taken -> {
                 final long snapshotAt = System.nanoTime();
                 final ChunkState state = toState(taken.snapshot(), world.getMinHeight(),
                     world.getMaxHeight());
                 return new ChunkRead(state, snapshotAt - askedAt, System.nanoTime() - snapshotAt,
-                    this.revisions.publisherId(), taken.revision());
+                    this.revisions.publisherId(), taken.revision(), taken.entities());
             });
     }
 

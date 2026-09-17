@@ -23,6 +23,7 @@ import net.civmc.shards.api.mirror.BlockUpdate;
 import net.civmc.shards.api.mirror.ChunkSectionState;
 import net.civmc.shards.api.mirror.ChunkState;
 import net.civmc.shards.api.mirror.ChunkStateCodec;
+import net.civmc.shards.api.mirror.MirroredEntity;
 import net.civmc.shards.api.region.ShardPoint;
 import net.civmc.shards.paper.border.BorderOutlook;
 import net.civmc.shards.paper.border.ShardBorder;
@@ -79,6 +80,7 @@ public final class MirrorView implements Listener {
     private final Logger logger;
     private final int radiusChunks;
     private final MirrorMetrics metrics;
+    private final MirrorEntities entities;
 
     // One copy per chunk, shared by everybody on this server. A hundred players at one seam ask for
     // the same ground, and it is the same answer for all of them
@@ -98,7 +100,8 @@ public final class MirrorView implements Listener {
 
     public MirrorView(final JavaPlugin plugin, final ShardBorder border, final BorderOutlook outlook,
                       final ShardsClient client, final String serverName, final Logger logger,
-                      final int radiusChunks, final MirrorMetrics metrics) {
+                      final int radiusChunks, final MirrorMetrics metrics,
+                      final MirrorEntities entities) {
         this.plugin = plugin;
         this.border = border;
         this.outlook = outlook;
@@ -107,6 +110,7 @@ public final class MirrorView implements Listener {
         this.logger = logger;
         this.radiusChunks = radiusChunks;
         this.metrics = metrics;
+        this.entities = entities;
     }
 
     /**
@@ -166,6 +170,9 @@ public final class MirrorView implements Listener {
         if (!current.send().isEmpty()) {
             viewer.sendMultiBlockChange(current.send());
         }
+        // The contents of a build rather than its walls. After the blocks, so a frame is never hung in
+        // front of a wall that has not arrived yet
+        this.entities.show(viewer, key.world(), key.x(), key.z(), current.entities());
     }
 
     /**
@@ -211,8 +218,9 @@ public final class MirrorView implements Listener {
             final ChunkState state = ChunkStateCodec.fromBytes(Base64.getDecoder().decode(response.state()));
             final String publisherId = response.publisherId();
             final long revision = response.revision();
+            final List<MirroredEntity> entities = response.entities();
             diff(key, state).whenComplete((blocks, failure) -> Bukkit.getScheduler().runTask(this.plugin,
-                () -> installed(key, blocks, failure, publisherId, revision)));
+                () -> installed(key, blocks, failure, publisherId, revision, entities)));
         } catch (final RuntimeException unreadable) {
             this.logger.log(Level.WARNING, "Could not read " + key + " as its owner sent it", unreadable);
             this.inFlight.remove(key);
@@ -224,13 +232,14 @@ public final class MirrorView implements Listener {
      * its answer has arrived. Main thread.
      */
     private void installed(final ChunkKey key, final Map<Position, BlockData> blocks,
-                           final Throwable failure, final String publisherId, final long revision) {
+                           final Throwable failure, final String publisherId, final long revision,
+                           final List<MirroredEntity> entities) {
         try {
             if (failure != null) {
                 this.logger.log(Level.FINE, "Could not compare " + key + " with our own copy", failure);
                 return;
             }
-            install(key, blocks, publisherId, revision);
+            install(key, blocks, publisherId, revision, entities);
         } finally {
             this.inFlight.remove(key);
         }
@@ -247,7 +256,8 @@ public final class MirrorView implements Listener {
      * <p>Main thread: it reads this server's own world, and it decides who has to be told again.</p>
      */
     private void install(final ChunkKey key, final Map<Position, BlockData> blocks,
-                         final String publisherId, final long revision) {
+                         final String publisherId, final long revision,
+                         final List<MirroredEntity> entities) {
         final Mirrored previous = this.mirrored.get(key);
         // Announced while this was being read, so of the two pictures this is the older one
         final boolean overtaken = this.changedWhileFetching.remove(key);
@@ -269,8 +279,9 @@ public final class MirrorView implements Listener {
             }
         }
         this.mirrored.put(key, new Mirrored(blocks, send, System.nanoTime(), overtaken, publisherId,
-            revision));
-        if (previous != null && previous.blocks().equals(blocks)) {
+            revision, entities));
+        if (previous != null && previous.blocks().equals(blocks)
+            && previous.entities().equals(entities)) {
             // Nothing has changed over there, so nobody needs telling again
             return;
         }
@@ -358,10 +369,25 @@ public final class MirrorView implements Listener {
         return blocks;
     }
 
+    /**
+     * Drops what a player has walked away from.
+     *
+     * <p>Blocks need nothing said, because a client throws a chunk away when it leaves range and is
+     * sent this server's own version of it if they come back. The drawn entities belong to no chunk,
+     * so they would stand in an unloaded world forever unless they are taken away by name.</p>
+     */
     private void forgetOutOfRange(final Player viewer, final Set<ChunkKey> inRange) {
         final Set<ChunkKey> alreadyShown = this.shown.get(viewer.getUniqueId());
-        if (alreadyShown != null) {
-            alreadyShown.retainAll(inRange);
+        if (alreadyShown == null) {
+            return;
+        }
+        final Iterator<ChunkKey> shownChunks = alreadyShown.iterator();
+        while (shownChunks.hasNext()) {
+            final ChunkKey key = shownChunks.next();
+            if (!inRange.contains(key)) {
+                shownChunks.remove();
+                this.entities.forget(viewer, key.world(), key.x(), key.z());
+            }
         }
     }
 
@@ -426,7 +452,7 @@ public final class MirrorView implements Listener {
         }
         // Keeps the fetch time, because nothing has been re-read - only corrected
         this.mirrored.put(key, new Mirrored(blocks, blocks, current.fetchedAtNanos(),
-            current.stale() || missedOne, update.publisherId(), update.revision()));
+            current.stale() || missedOne, update.publisherId(), update.revision(), current.entities()));
         for (final Player viewer : Bukkit.getOnlinePlayers()) {
             final Set<ChunkKey> alreadyShown = this.shown.get(viewer.getUniqueId());
             if (alreadyShown != null && alreadyShown.contains(key)) {
@@ -519,9 +545,12 @@ public final class MirrorView implements Listener {
             this.lastNearby.put(new ChunkKey(chunk.world(), chunk.x(), chunk.z()), System.nanoTime());
             // Nothing has been shown to anybody yet, so there is nothing to put back to our own copy
             // and send is simply the difference
+            // No entities: what is saved is the difference in blocks, and a frame is not a block. A
+            // restored chunk draws its walls at once and its contents when it is read again, which is
+            // the first time anybody looks at it
             this.mirrored.put(new ChunkKey(chunk.world(), chunk.x(), chunk.z()),
                 new Mirrored(blocks, blocks, System.nanoTime(), true, chunk.publisherId(),
-                    chunk.revision()));
+                    chunk.revision(), List.of()));
         }
         if (unknownBlocks > 0) {
             this.logger.warning("Dropped " + unknownBlocks + " saved mirror block(s) the game no longer "
@@ -564,6 +593,7 @@ public final class MirrorView implements Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onQuit(final PlayerQuitEvent event) {
         this.shown.remove(event.getPlayer().getUniqueId());
+        this.entities.forget(event.getPlayer());
     }
 
     /**
@@ -576,13 +606,16 @@ public final class MirrorView implements Listener {
      * @param publisherId which run of the owning server numbered the announcements this picture counts
      * @param revision the last announcement about this chunk that is accounted for here. See
      *     {@link ChunkRevisions}
+     * @param entities the owner's frames and stands in this chunk, drawn rather than sent as blocks
+     *     because they are not blocks
      */
     private record Mirrored(Map<Position, BlockData> blocks, Map<Position, BlockData> send,
-                            long fetchedAtNanos, boolean stale, String publisherId, long revision) {
+                            long fetchedAtNanos, boolean stale, String publisherId, long revision,
+                            List<MirroredEntity> entities) {
 
         Mirrored readAgain() {
             return new Mirrored(this.blocks(), this.send(), this.fetchedAtNanos(), true,
-                this.publisherId(), this.revision());
+                this.publisherId(), this.revision(), this.entities());
         }
     }
 }
