@@ -13,12 +13,14 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import net.civmc.shards.api.ShardServerId;
 import net.civmc.shards.velocity.config.ShardsConfig;
 import net.civmc.shards.velocity.placement.ShardConnectionListener;
 import net.civmc.shards.velocity.placement.ShardPlacementService;
 import net.civmc.shards.velocity.playerdata.InFlightTransfers;
 import net.civmc.shards.velocity.playerdata.PlayerDataService;
+import net.civmc.shards.velocity.playerdata.ShardLockExpiry;
 import net.civmc.shards.velocity.rabbitmq.PlayerCheckpointHandler;
 import net.civmc.shards.velocity.rabbitmq.BorderProbeHandler;
 import net.civmc.shards.velocity.rabbitmq.PlayerClaimHandler;
@@ -79,6 +81,46 @@ public final class ShardsVelocityPlugin {
         if (!this.requestConsumer.start()) {
             this.logger.warn("Shards could not start its request consumer; no server can reach its player data");
         }
+        startLockExpiry(shardsConfig);
+    }
+
+    /**
+     * Watches for a shard that has died still holding its players.
+     *
+     * <p>On the proxy rather than in the shards, because the shard this is about is the one that is
+     * not running. It is also the only side that can tell "not answering" from "gone": it pings them
+     * and it knows who is connected to each.</p>
+     */
+    private void startLockExpiry(final ShardsConfig shardsConfig) {
+        if (shardsConfig.lockExpirySeconds() <= 0) {
+            this.logger.warn("Lock expiry is off: a shard that dies keeps its players unclaimable until it "
+                + "starts again");
+            return;
+        }
+        final ShardLockExpiry expiry = new ShardLockExpiry(this.proxyServer, this.playerDataService,
+            dataOwningServers(shardsConfig), TimeUnit.SECONDS.toMillis(shardsConfig.lockExpirySeconds()),
+            this.logger);
+        // Checked several times within the window rather than once at the end of it, so the moment a
+        // shard is declared dead does not depend on where its death fell in the cycle
+        final long checkSeconds = Math.max(5L, shardsConfig.lockExpirySeconds() / 4L);
+        this.proxyServer.getScheduler().buildTask(this, expiry::check)
+            .repeat(checkSeconds, TimeUnit.SECONDS)
+            .schedule();
+        this.logger.info("Dropping the locks of a shard that has not answered for {}s",
+            shardsConfig.lockExpirySeconds());
+    }
+
+    /**
+     * Every server that owns player data under a name of its own - the shards, and the holding
+     * server, which is not a shard but holds a player while they are on it.
+     */
+    private static List<String> dataOwningServers(final ShardsConfig shardsConfig) {
+        final Set<String> serverNames = new LinkedHashSet<>(shardsConfig.shards().keySet());
+        // The holding server is not a shard, but it owns a player's data while they are on it
+        if (!shardsConfig.holdingServer().isEmpty()) {
+            serverNames.add(shardsConfig.holdingServer());
+        }
+        return List.copyOf(serverNames);
     }
 
     @Subscribe
@@ -95,12 +137,7 @@ public final class ShardsVelocityPlugin {
      * server. Writing the mapping out once at startup gives them that.
      */
     private void logServerIds(final ShardsConfig shardsConfig) {
-        final Set<String> serverNames = new LinkedHashSet<>(shardsConfig.shards().keySet());
-        // The holding server is not a shard, but it owns a player's data while they are on it
-        if (!shardsConfig.holdingServer().isEmpty()) {
-            serverNames.add(shardsConfig.holdingServer());
-        }
-        for (final String serverName : serverNames) {
+        for (final String serverName : dataOwningServers(shardsConfig)) {
             this.logger.info("Server {} owns player data as {}", serverName, ShardServerId.of(serverName));
         }
     }
