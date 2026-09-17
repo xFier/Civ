@@ -46,6 +46,24 @@ public final class ShardsRabbitMqTopology {
      */
     public static final boolean REQUEST_QUEUE_DURABLE = true;
 
+    public static final String MIRROR_QUEUE_PREFIX = "shards.mirror.";
+    // A chunk request whose asker has given up is work nobody will look at, and the mirror asks about
+    // whatever a player has just walked towards - by the time a late one is answered they are
+    // somewhere else. Longer than the probe's, because a chunk costs real work to read and is worth
+    // waiting a little for
+    public static final int MIRROR_REQUEST_TTL_MILLIS = 30_000;
+
+    /**
+     * Where a shard is asked about its own chunks.
+     *
+     * <p>Addressed to a shard rather than to the proxy, which is the first message in this project
+     * that is. The proxy has the shard map but no world, so it cannot answer what is in a chunk - it
+     * only says whose chunk it is.</p>
+     */
+    public static String mirrorQueue(final String serverName) {
+        return MIRROR_QUEUE_PREFIX + serverName;
+    }
+
     public static final String REPLY_QUEUE_PREFIX = "shards.replies.";
 
     /**
