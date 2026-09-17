@@ -88,6 +88,26 @@ freeze-unowned-ground: true
 # or picked up. The border stays exactly as impermeable as it was - this only changes what is drawn.
 mirror-chunks: true
 
+# Whether what the neighbouring shards have said is kept across a restart.
+#
+# Without it, everything a neighbour has told this server lives only in memory. A restart throws it
+# all away and every chunk along every border is read again from nothing - and, the part that matters,
+# a neighbour that is down leaves a hole in the map: with nothing to draw, a player at the border sees
+# this server's own untouched copy, which is empty hills where there is a city. The one time the
+# mirror is most needed is the one time it has nothing.
+#
+# What is written is the difference from this server's own copy, not the neighbour's chunk, so it is a
+# fraction of the size and goes on screen without reading or comparing anything. It is kept in
+# plugins/Shards/mirror.json.gz, rewritten every five minutes and again when the server stops.
+#
+# Nothing loaded is trusted. Every restored chunk is read from its owner again the first time anybody
+# looks at it, so it is a head start and not a catch-up log - it is only ever as out of date as the
+# first second somebody stands there, and only stays so while its owner cannot be reached at all.
+#
+# This relies on freeze-unowned-ground: a saved difference only means anything against a copy that has
+# not moved underneath it.
+save-mirror: true
+
 # What the border between shards is drawn with, where a player can see one.
 #
 #   particles  coloured dust, repainted twice a second. Nothing exists in the world between passes,

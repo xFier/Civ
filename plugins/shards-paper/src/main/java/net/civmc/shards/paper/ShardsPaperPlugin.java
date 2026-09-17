@@ -1,6 +1,7 @@
 package net.civmc.shards.paper;
 
 import java.util.Optional;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import net.civmc.shards.api.ServerStartupRequest;
@@ -24,6 +25,7 @@ import net.civmc.shards.paper.mirror.MirrorPlayerPublisher;
 import net.civmc.shards.paper.mirror.MirrorPlayerView;
 import net.civmc.shards.paper.mirror.MirrorPlayers;
 import net.civmc.shards.paper.mirror.MirrorRepairListener;
+import net.civmc.shards.paper.mirror.MirrorStore;
 import net.civmc.shards.paper.mirror.MirrorUpdatePublisher;
 import net.civmc.shards.paper.mirror.MirrorView;
 import net.civmc.shards.paper.mirror.UnownedBlockListener;
@@ -55,6 +57,9 @@ public final class ShardsPaperPlugin extends JavaPlugin {
     // after walking towards a border the far side fills in, not about how often work is done
     private static final long MIRROR_TICKS = 20L;
     private static final long MIRROR_REPORT_TICKS = 20L * 30L;
+    // Long, because what is written is only a head start: everything saved is read again from its owner
+    // the first time anybody looks at it, so a save that is an hour out of date costs nothing
+    private static final long MIRROR_SAVE_TICKS = 20L * 60L * 5L;
     private static final long STARTUP_RETRY_MIN_TICKS = 20L * 5L;
     private static final long STARTUP_RETRY_MAX_TICKS = 20L * 60L;
 
@@ -64,6 +69,8 @@ public final class ShardsPaperPlugin extends JavaPlugin {
     private OwnedPlayers owned;
     private TransferService transfers;
     private ShardsServer mirrorServer;
+    private MirrorView mirror;
+    private MirrorStore mirrorStore;
     private final ShardBorder border = new ShardBorder();
     // Read from the login thread, written from whichever thread the startup answer arrives on
     private volatile boolean startupComplete;
@@ -130,6 +137,12 @@ public final class ShardsPaperPlugin extends JavaPlugin {
         if (this.mirrorServer != null) {
             this.mirrorServer.close();
         }
+        // After the mirror has stopped being updated and while the server is still whole. Written here
+        // rather than only on the timer so an ordinary stop does not throw away everything since the
+        // last one
+        if (this.mirrorStore != null && this.mirror != null) {
+            this.mirrorStore.save(this.mirror.toSave());
+        }
         if (this.client != null) {
             this.client.close();
         }
@@ -169,6 +182,32 @@ public final class ShardsPaperPlugin extends JavaPlugin {
                 view.sweep(player);
             }
         }, UNOWNED_SWEEP_TICKS, UNOWNED_SWEEP_TICKS);
+    }
+
+    /**
+     * Keeps what the neighbours have said across a restart, and puts it back.
+     *
+     * <p>Nothing loaded is trusted: every restored chunk is marked to be read from its owner again the
+     * first time anybody looks at it. What it buys is a border that is drawn immediately rather than
+     * filling in, and - the reason it is worth having - a neighbour that is down showing the last
+     * thing it said instead of this server's own empty copy of its land.</p>
+     */
+    private void startMirrorStore(final MirrorView mirror) {
+        if (!this.config.saveMirror()) {
+            getLogger().warning("Not saving the mirror: a restart will read every chunk along every "
+                + "border again, and while a neighbour is down its ground will show as this server's "
+                + "own untouched copy of it");
+            return;
+        }
+        this.mirrorStore = new MirrorStore(getDataFolder().toPath().resolve("mirror.json.gz"), getLogger());
+        mirror.restore(this.mirrorStore.load());
+        final MirrorStore store = this.mirrorStore;
+        // The copy is taken on the main thread and the writing is not. Serialising tens of thousands of
+        // blocks is not something to do between ticks for a picture that is only a head start anyway
+        getServer().getScheduler().runTaskTimer(this, () -> {
+            final List<MirrorStore.Saved> chunks = mirror.toSave();
+            getServer().getScheduler().runTaskAsynchronously(this, () -> store.save(chunks));
+        }, MIRROR_SAVE_TICKS, MIRROR_SAVE_TICKS);
     }
 
     /**
@@ -214,6 +253,8 @@ public final class ShardsPaperPlugin extends JavaPlugin {
         // distance does not come into it - it is this server's players who are looking
         final MirrorView mirror = new MirrorView(this, this.border, outlook, this.client,
             this.config.serverName(), getLogger(), getServer().getViewDistance(), metrics);
+        this.mirror = mirror;
+        startMirrorStore(mirror);
         this.mirrorServer = new ShardsServer(this.config.connectionFactory(), this.config.serverName(), this,
             getLogger(), new ChunkStateProvider(this.border, revisions), metrics,
             // Announcements arrive on a broker thread and these read the world and send to players
