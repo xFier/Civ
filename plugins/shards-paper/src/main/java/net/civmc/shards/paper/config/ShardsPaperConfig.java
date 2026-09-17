@@ -18,11 +18,14 @@ import org.bukkit.configuration.file.FileConfiguration;
  * @param arrivalSubtitle MiniMessage shown beneath it, blank for none
  * @param skySyncSeconds how often this server asks the proxy what the sky should look like. Zero
  *     leaves it running its own clock and weather, so a crossing can go from noon into a storm
+ * @param hideUnownedEntities whether this server stops spawning and stops showing entities on
+ *     ground it does not own, which it otherwise populates with a wrong copy the owning shard cannot
+ *     see
  * @param borderStyle what the border is drawn with
  */
 public record ShardsPaperConfig(String serverName, String failureMessage, int saveIntervalSeconds,
                                 String arrivalTitle, String arrivalSubtitle, int skySyncSeconds,
-                                BorderStyle borderStyle,
+                                boolean hideUnownedEntities, BorderStyle borderStyle,
                                 String user, String password, String host, int port) {
 
     /**
@@ -75,6 +78,7 @@ public record ShardsPaperConfig(String serverName, String failureMessage, int sa
             arrival == null ? "" : arrival.getString("title", ""),
             arrival == null ? "" : arrival.getString("subtitle", ""),
             configuration.getInt("sky-sync-seconds", 5),
+            configuration.getBoolean("hide-unowned-entities", true),
             borderStyle(configuration.getString("border-style", "particles")),
             rabbitmq.getString("user", "guest"),
             rabbitmq.getString("password", "guest"),
