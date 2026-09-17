@@ -18,6 +18,7 @@ import net.civmc.shards.paper.border.ShardRespawnListener;
 import net.civmc.shards.paper.border.TransferService;
 import net.civmc.shards.paper.config.ShardsPaperConfig;
 import net.civmc.shards.paper.mirror.ChunkStateProvider;
+import net.civmc.shards.paper.mirror.MirrorMetrics;
 import net.civmc.shards.paper.mirror.MirrorRepairListener;
 import net.civmc.shards.paper.mirror.MirrorView;
 import net.civmc.shards.paper.mirror.UnownedEntityView;
@@ -46,6 +47,7 @@ public final class ShardsPaperPlugin extends JavaPlugin {
     // Once a second. A chunk that is already mirrored costs a lookup here, so this is about how long
     // after walking towards a border the far side fills in, not about how often work is done
     private static final long MIRROR_TICKS = 20L;
+    private static final long MIRROR_REPORT_TICKS = 20L * 30L;
     private static final long STARTUP_RETRY_MIN_TICKS = 20L * 5L;
     private static final long STARTUP_RETRY_MAX_TICKS = 20L * 60L;
 
@@ -177,14 +179,15 @@ public final class ShardsPaperPlugin extends JavaPlugin {
                 + "were split");
             return;
         }
+        final MirrorMetrics metrics = new MirrorMetrics();
         this.mirrorServer = new ShardsServer(this.config.connectionFactory(), this.config.serverName(), this,
-            getLogger(), new ChunkStateProvider(this.border));
+            getLogger(), new ChunkStateProvider(this.border), metrics);
         this.mirrorServer.start();
 
         // As far as the client renders, which is what has to look right. The neighbour's own view
         // distance does not come into it - it is this server's players who are looking
         final MirrorView mirror = new MirrorView(this, this.border, outlook, this.client,
-            this.config.serverName(), getLogger(), getServer().getViewDistance());
+            this.config.serverName(), getLogger(), getServer().getViewDistance(), metrics);
         getServer().getPluginManager().registerEvents(mirror, this);
         // A refused placement makes the client correct itself to what is really there, which for
         // another shard's ground is this server's own copy - so the mirror has to be drawn again
@@ -194,6 +197,11 @@ public final class ShardsPaperPlugin extends JavaPlugin {
                 mirror.update(player);
             }
         }, MIRROR_TICKS, MIRROR_TICKS);
+        // What the mirror costs is not visible from anywhere else, and the two numbers it reports -
+        // how long a chunk takes to read, and how many blocks really differ - are what decide whether
+        // this survives a busy border
+        getServer().getScheduler().runTaskTimerAsynchronously(this, () -> metrics.report(getLogger()),
+            MIRROR_REPORT_TICKS, MIRROR_REPORT_TICKS);
     }
 
     /**

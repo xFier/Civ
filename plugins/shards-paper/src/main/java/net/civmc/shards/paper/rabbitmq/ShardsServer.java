@@ -25,6 +25,7 @@ import net.civmc.shards.api.ChunkStateResponse;
 import net.civmc.shards.api.ShardsRabbitMqTopology;
 import net.civmc.shards.api.mirror.ChunkStateCodec;
 import net.civmc.shards.paper.mirror.ChunkStateProvider;
+import net.civmc.shards.paper.mirror.MirrorMetrics;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -56,17 +57,20 @@ public final class ShardsServer implements AutoCloseable {
     private final JavaPlugin plugin;
     private final Logger logger;
     private final ChunkStateProvider chunks;
+    private final MirrorMetrics metrics;
     private volatile boolean closed;
     private Connection connection;
     private Channel channel;
 
     public ShardsServer(final ConnectionFactory connectionFactory, final String serverName,
-                        final JavaPlugin plugin, final Logger logger, final ChunkStateProvider chunks) {
+                        final JavaPlugin plugin, final Logger logger, final ChunkStateProvider chunks,
+                        final MirrorMetrics metrics) {
         this.connectionFactory = connectionFactory;
         this.serverName = serverName;
         this.plugin = plugin;
         this.logger = logger;
         this.chunks = chunks;
+        this.metrics = metrics;
     }
 
     public boolean start() {
@@ -131,10 +135,14 @@ public final class ShardsServer implements AutoCloseable {
     }
 
     private ChunkStateResponse answer(final ChunkStateRequest request) {
+        final long startedAt = System.nanoTime();
         try {
             final byte[] encoded = ChunkStateCodec.toBytes(
                 this.chunks.read(request.world(), request.chunkX(), request.chunkZ())
                     .get(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS));
+            // Timed from here rather than from the chunk load, so this is the work this shard does for
+            // a neighbour rather than however long it waited for a chunk to come off disk
+            this.metrics.served(System.nanoTime() - startedAt, encoded.length);
             return ChunkStateResponse.of(request.requestId(), request.world(), request.chunkX(),
                 request.chunkZ(), Base64.getEncoder().encodeToString(encoded));
         } catch (final InterruptedException exception) {

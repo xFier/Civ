@@ -70,6 +70,7 @@ public final class MirrorView implements Listener {
     private final String serverName;
     private final Logger logger;
     private final int radiusChunks;
+    private final MirrorMetrics metrics;
 
     // One copy per chunk, shared by everybody on this server. A hundred players at one seam ask for
     // the same ground, and it is the same answer for all of them
@@ -82,7 +83,7 @@ public final class MirrorView implements Listener {
 
     public MirrorView(final JavaPlugin plugin, final ShardBorder border, final BorderOutlook outlook,
                       final ShardsClient client, final String serverName, final Logger logger,
-                      final int radiusChunks) {
+                      final int radiusChunks, final MirrorMetrics metrics) {
         this.plugin = plugin;
         this.border = border;
         this.outlook = outlook;
@@ -90,6 +91,7 @@ public final class MirrorView implements Listener {
         this.serverName = serverName;
         this.logger = logger;
         this.radiusChunks = radiusChunks;
+        this.metrics = metrics;
     }
 
     /**
@@ -235,8 +237,18 @@ public final class MirrorView implements Listener {
         }
         return world.getChunkAtAsync(key.x(), key.z())
             .thenApply(Chunk::getChunkSnapshot)
-            .thenApplyAsync(ours -> differences(key, theirs, ours, world.getMinHeight(), world.getMaxHeight()))
+            .thenApplyAsync(ours -> timedDifferences(key, theirs, ours, world.getMinHeight(),
+                world.getMaxHeight()))
             .thenApply(MirrorView::toBlockData);
+    }
+
+    private Map<Position, String> timedDifferences(final ChunkKey key, final ChunkState theirs,
+                                                   final ChunkSnapshot ours, final int minHeight,
+                                                   final int maxHeight) {
+        final long startedAt = System.nanoTime();
+        final Map<Position, String> changed = differences(key, theirs, ours, minHeight, maxHeight);
+        this.metrics.diffed(System.nanoTime() - startedAt, changed.size());
+        return changed;
     }
 
     private Map<Position, String> differences(final ChunkKey key, final ChunkState theirs,
