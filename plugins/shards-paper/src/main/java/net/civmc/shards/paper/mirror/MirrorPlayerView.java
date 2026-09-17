@@ -1,8 +1,6 @@
 package net.civmc.shards.paper.mirror;
 
 import com.github.retrooper.packetevents.PacketEvents;
-import com.github.retrooper.packetevents.protocol.entity.data.EntityData;
-import com.github.retrooper.packetevents.protocol.entity.data.EntityDataTypes;
 import com.github.retrooper.packetevents.protocol.entity.type.EntityTypes;
 import com.github.retrooper.packetevents.protocol.player.TextureProperty;
 import com.github.retrooper.packetevents.protocol.player.UserProfile;
@@ -10,7 +8,6 @@ import com.github.retrooper.packetevents.util.Vector3d;
 import com.github.retrooper.packetevents.wrapper.PacketWrapper;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerDestroyEntities;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityHeadLook;
-import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityMetadata;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityTeleport;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerPlayerInfoUpdate;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSpawnEntity;
@@ -46,6 +43,13 @@ import org.bukkit.event.player.PlayerQuitEvent;
  * <p>Entity ids are taken from the top of the range downwards, where the server's own counter will
  * not reach in any plausible lifetime. A collision would mean the client attaching somebody else's
  * movement to a real entity.</p>
+ *
+ * <p><strong>No entity metadata is sent, and that is not an oversight.</strong> The obvious thing to
+ * send is which skin layers to draw - without it the outer layer, the hat and jacket, is missing. It
+ * was sent at field 17, which is what that field used to be; on this version 17 is a float and the
+ * client refuses the packet and drops the connection outright. A cosmetic packet took every player
+ * on both shards offline. Metadata goes back in when the right index is read off a real player rather
+ * than inferred, and until then a mirrored player has a plain skin, no armour and no pose.</p>
  */
 public final class MirrorPlayerView implements Listener, MirrorPlayers {
 
@@ -56,9 +60,6 @@ public final class MirrorPlayerView implements Listener, MirrorPlayers {
     // flicker on a hiccup; this is short enough that a shard going down does not leave people standing
     // around in it
     private static final long FORGET_AFTER_NANOS = TimeUnit.SECONDS.toNanos(3L);
-    // Which parts of the skin to draw. Without it the outer layer - hat, jacket, sleeves - is missing,
-    // which is subtle and wrong in a way people notice without being able to say why
-    private static final byte ALL_SKIN_LAYERS = 0x7F;
 
     // Downwards from the top, far from anything the server will assign
     private final AtomicInteger nextEntityId = new AtomicInteger(Integer.MAX_VALUE - 1);
@@ -155,8 +156,6 @@ public final class MirrorPlayerView implements Listener, MirrorPlayers {
         send(viewer, new WrapperPlayServerSpawnEntity(entityId, Optional.of(subject.uuid()),
             EntityTypes.PLAYER, new Vector3d(subject.x(), subject.y(), subject.z()), subject.pitch(),
             subject.yaw(), subject.headYaw(), 0, Optional.empty()));
-        send(viewer, new WrapperPlayServerEntityMetadata(entityId,
-            List.of(new EntityData<>(17, EntityDataTypes.BYTE, ALL_SKIN_LAYERS))));
         send(viewer, new WrapperPlayServerEntityHeadLook(entityId, subject.headYaw()));
     }
 
