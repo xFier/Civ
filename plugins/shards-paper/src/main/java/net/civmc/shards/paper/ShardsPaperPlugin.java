@@ -20,6 +20,8 @@ import net.civmc.shards.paper.border.ShardRespawnListener;
 import net.civmc.shards.paper.border.TransferService;
 import net.civmc.shards.paper.config.ShardsPaperConfig;
 import net.civmc.shards.paper.mirror.ChunkRevisions;
+import net.civmc.shards.paper.mirror.EntityDataLayout;
+import net.civmc.shards.paper.mirror.LearnedEntityDataLayout;
 import net.civmc.shards.paper.mirror.ChunkStateProvider;
 import net.civmc.shards.paper.mirror.MirrorMetrics;
 import net.civmc.shards.paper.mirror.MirrorPlayerPublisher;
@@ -72,6 +74,7 @@ public final class ShardsPaperPlugin extends JavaPlugin {
     private ShardsServer mirrorServer;
     private MirrorView mirror;
     private BorderEntitySweep entitySweep;
+    private EntityDataLayout entityDataLayout = EntityDataLayout.UNKNOWN;
     private MirrorStore mirrorStore;
     private final ShardBorder border = new ShardBorder();
     // Read from the login thread, written from whichever thread the startup answer arrives on
@@ -248,6 +251,7 @@ public final class ShardsPaperPlugin extends JavaPlugin {
         // announcement, and the provider that says which number a snapshot was taken at
         final ChunkRevisions revisions = new ChunkRevisions();
         final MirrorPlayers players = startPlayerMirror();
+        this.entityDataLayout = startEntityDataLayout();
         // As far as the client renders, which is what has to look right. The neighbour's own view
         // distance does not come into it - it is this server's players who are looking
         final MirrorView mirror = new MirrorView(this, this.border, outlook, this.client,
@@ -307,6 +311,37 @@ public final class ShardsPaperPlugin extends JavaPlugin {
      * ordinary failure. A half-installed library throws that at the point of first use rather than at
      * load, which is how this took the border, the transfers and the sky down with it.</p>
      */
+    /**
+     * Starts reading metadata field numbers off this server's own entities.
+     *
+     * <p>Nothing sends metadata yet - a mirrored player still has a plain skin and no pose. This is the
+     * half that has to come first, because the rule after a guessed field number took every player on
+     * both shards offline was that an index is read off a real entity or not sent at all, and until
+     * something is doing the reading there is nothing to send.</p>
+     *
+     * <p>Behind the same guard as the rest of the packet work, for the same reason: a soft dependency
+     * that takes the plugin down when it is missing is not soft.</p>
+     */
+    private EntityDataLayout startEntityDataLayout() {
+        final Plugin packetEvents = getServer().getPluginManager().getPlugin("packetevents");
+        if (packetEvents == null || !packetEvents.isEnabled()) {
+            return EntityDataLayout.UNKNOWN;
+        }
+        try {
+            final LearnedEntityDataLayout layout = new LearnedEntityDataLayout(getLogger());
+            layout.watch();
+            // What the network threads saw, turned into what is known, where the server's entity table
+            // can be read. Once a second: nothing is waiting on it, and a field is learned the first
+            // time an entity of that kind is sent to anybody
+            getServer().getScheduler().runTaskTimer(this, layout::settle, 20L, 20L);
+            return layout;
+        } catch (final RuntimeException | LinkageError exception) {
+            getLogger().log(Level.WARNING, "PacketEvents is installed but its metadata could not be "
+                + "read, so nothing that needs a metadata field number will be drawn", exception);
+            return EntityDataLayout.UNKNOWN;
+        }
+    }
+
     private MirrorPlayers startPlayerMirror() {
         final Plugin packetEvents = getServer().getPluginManager().getPlugin("packetevents");
         if (packetEvents == null || !packetEvents.isEnabled()) {
