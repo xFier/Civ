@@ -167,12 +167,16 @@ public final class PlayerSnapshots {
      */
     public static void restoreMotion(final Player player, final PlayerSnapshot snapshot) {
         player.setVelocity(new Vector(snapshot.velocityX(), snapshot.velocityY(), snapshot.velocityZ()));
-        // Before gliding and sprinting, which a fall can clear
+        // Before gliding, which a fall can clear
         player.setFallDistance(snapshot.fallDistance());
         if (snapshot.gliding()) {
             player.setGliding(true);
         }
-        player.setSprinting(snapshot.sprinting());
+        // Sprinting is deliberately not restored, though the snapshot carries it. It is a state the
+        // client starts and stops, and a client that never started it here will never stop it - so a
+        // player who crossed mid-sprint stayed sprinting to everybody watching, for the rest of their
+        // time on the shard. The momentum that actually matters is in the velocity above, and a client
+        // still holding the key tells this server so on its first move anyway
         if (snapshot.swimming()) {
             player.setSwimming(true);
         }

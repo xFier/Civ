@@ -88,8 +88,13 @@ public final class NetworkTabList {
      */
     private void show(final Player viewer, final Player subject) {
         if (onSameServer(viewer, subject)) {
-            // Their shared server sends this entry itself, so ours would be the same player twice
-            viewer.getTabList().removeEntry(subject.getUniqueId());
+            // Nothing at all, and in particular not a removal. A tab list entry is keyed by uuid, so
+            // removing "ours" removes whatever is there - including the one the server they now share
+            // has just sent. That takes away the client's only player-info for that uuid, which is
+            // both the tab entry and what the player entity is rendered from, so they go invisible
+            // until something re-sends it; if what re-sends it is an update with no profile attached,
+            // they come back wearing the default skin. Leaving it alone is safe because the entry the
+            // shared server sends replaces ours under the same uuid
             return;
         }
         final Optional<TabListEntry> existing = viewer.getTabList().getEntry(subject.getUniqueId());
