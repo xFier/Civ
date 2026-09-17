@@ -8,7 +8,10 @@ import net.civmc.shards.api.ServerStartupResponse;
 import net.civmc.shards.paper.border.ArrivalCue;
 import net.civmc.shards.paper.border.BorderNotices;
 import net.civmc.shards.paper.border.BorderOutlook;
+import net.civmc.shards.paper.border.BorderRenderer;
 import net.civmc.shards.paper.border.BorderView;
+import net.civmc.shards.paper.border.GlassBorderRenderer;
+import net.civmc.shards.paper.border.ParticleBorderRenderer;
 import net.civmc.shards.paper.border.ShardBorder;
 import net.civmc.shards.paper.border.ShardBorderListener;
 import net.civmc.shards.paper.border.TransferService;
@@ -34,6 +37,7 @@ public final class ShardsPaperPlugin extends JavaPlugin {
     private static final long STARTUP_RETRY_MAX_TICKS = 20L * 60L;
 
     private ShardsPaperConfig config;
+    private BorderView view;
     private ShardsClient client;
     private OwnedPlayers owned;
     private TransferService transfers;
@@ -60,9 +64,9 @@ public final class ShardsPaperPlugin extends JavaPlugin {
 
         final BorderNotices notices = new BorderNotices();
         final BorderOutlook outlook = new BorderOutlook(this.client, this.config.serverName(), getLogger());
-        final BorderView view = new BorderView(this.border, outlook, notices);
+        this.view = new BorderView(this.border, outlook, notices, renderer());
         this.transfers = new TransferService(this, this.client, this.owned, getLogger(),
-            this.config.serverName(), this.config.failureMessage(), notices, view);
+            this.config.serverName(), this.config.failureMessage(), notices, this.view);
 
         final ArrivalCue arrivalCue = new ArrivalCue(this.config.arrivalTitle(), this.config.arrivalSubtitle());
         getServer().getPluginManager().registerEvents(
@@ -75,7 +79,7 @@ public final class ShardsPaperPlugin extends JavaPlugin {
             new ShardBorderListener(this.border, this.transfers, notices, outlook), this);
         getCommand("shardsnapshot").setExecutor(new SnapshotVerifyCommand());
         startPeriodicSave();
-        startBorderView(view);
+        startBorderView(this.view);
     }
 
     @Override
@@ -89,9 +93,24 @@ public final class ShardsPaperPlugin extends JavaPlugin {
         if (this.owned != null) {
             this.owned.drain(SHUTDOWN_DRAIN_SECONDS, TimeUnit.SECONDS);
         }
+        if (this.view != null) {
+            // Anything the border put in the world has to come back out of it. A display entity left
+            // behind is invisible litter that nothing else will ever clean up
+            this.view.close();
+        }
         if (this.client != null) {
             this.client.close();
         }
+    }
+
+    /**
+     * Whichever way this server has been told to draw its border.
+     */
+    private BorderRenderer renderer() {
+        return switch (this.config.borderStyle()) {
+            case PARTICLES -> new ParticleBorderRenderer();
+            case GLASS -> new GlassBorderRenderer(this);
+        };
     }
 
     /**

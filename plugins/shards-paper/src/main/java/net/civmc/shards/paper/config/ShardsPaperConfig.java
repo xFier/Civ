@@ -1,6 +1,7 @@
 package net.civmc.shards.paper.config;
 
 import com.rabbitmq.client.ConnectionFactory;
+import java.util.Locale;
 import java.util.Objects;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -15,10 +16,24 @@ import org.bukkit.configuration.file.FileConfiguration;
  *     off, which means a server that is killed rather than stopped loses everything since they arrived
  * @param arrivalTitle MiniMessage shown to a player crossing in from another shard, blank for none
  * @param arrivalSubtitle MiniMessage shown beneath it, blank for none
+ * @param borderStyle what the border is drawn with
  */
 public record ShardsPaperConfig(String serverName, String failureMessage, int saveIntervalSeconds,
-                                String arrivalTitle, String arrivalSubtitle,
+                                String arrivalTitle, String arrivalSubtitle, BorderStyle borderStyle,
                                 String user, String password, String host, int port) {
+
+    /**
+     * What the border is drawn with.
+     *
+     * <p>Two of them because they fail in opposite directions, and which matters depends on the
+     * server: particles cost nothing and put nothing in the world, but a client set to minimal
+     * particles sees no border at all; glass renders whatever that setting says, at the price of
+     * being entities other plugins can see.</p>
+     */
+    public enum BorderStyle {
+        PARTICLES,
+        GLASS
+    }
 
     public ShardsPaperConfig {
         serverName = requireNonBlank(serverName, "server-name");
@@ -30,6 +45,7 @@ public record ShardsPaperConfig(String serverName, String failureMessage, int sa
         }
         arrivalTitle = arrivalTitle == null ? "" : arrivalTitle;
         arrivalSubtitle = arrivalSubtitle == null ? "" : arrivalSubtitle;
+        borderStyle = borderStyle == null ? BorderStyle.PARTICLES : borderStyle;
         user = requireNonBlank(user, "rabbitmq.user");
         password = password == null ? "" : password;
         host = requireNonBlank(host, "rabbitmq.host");
@@ -52,10 +68,24 @@ public record ShardsPaperConfig(String serverName, String failureMessage, int sa
             configuration.getInt("save-interval-seconds", 60),
             arrival == null ? "" : arrival.getString("title", ""),
             arrival == null ? "" : arrival.getString("subtitle", ""),
+            borderStyle(configuration.getString("border-style", "particles")),
             rabbitmq.getString("user", "guest"),
             rabbitmq.getString("password", "guest"),
             rabbitmq.getString("host", "localhost"),
             rabbitmq.getInt("port", 5672));
+    }
+
+    /**
+     * Named rather than numbered so a typo is refused at startup with the options in the message,
+     * instead of quietly falling back to a border the operator did not ask for.
+     */
+    private static BorderStyle borderStyle(final String configured) {
+        try {
+            return BorderStyle.valueOf(configured.trim().toUpperCase(Locale.ROOT));
+        } catch (final IllegalArgumentException exception) {
+            throw new IllegalArgumentException("border-style must be one of particles, glass - not "
+                + configured);
+        }
     }
 
     public ConnectionFactory connectionFactory() {
