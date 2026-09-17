@@ -1,5 +1,6 @@
 package net.civmc.shards.velocity.rabbitmq;
 
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -16,12 +17,17 @@ public interface RequestHandler<REQ, RES> {
     String queue();
 
     /**
-     * Whether this queue survives a broker restart. Durable by default, because most of these carry
-     * a player's data and losing one loses work; a handler whose requests stop being worth answering
-     * the moment they are stale says so by overriding this.
+     * Broker arguments for this handler's queue, empty unless it needs any.
+     *
+     * <p>Where a handler whose requests stop being worth answering says so - with a message TTL,
+     * rather than by asking for a transient queue, which RabbitMQ refuses at the cost of the whole
+     * connection.</p>
+     *
+     * <p>These are fixed at declaration: changing one later means the declare stops matching the
+     * queue that already exists, and the broker refuses it until the old queue is deleted.</p>
      */
-    default boolean durable() {
-        return true;
+    default Map<String, Object> arguments() {
+        return Map.of();
     }
 
     Class<REQ> requestType();
