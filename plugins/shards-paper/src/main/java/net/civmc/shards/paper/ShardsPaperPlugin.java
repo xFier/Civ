@@ -8,6 +8,7 @@ import net.civmc.shards.api.ServerStartupRequest;
 import net.civmc.shards.api.ServerStartupResponse;
 import net.civmc.shards.paper.border.ArrivalCue;
 import net.civmc.shards.paper.border.BorderNotices;
+import net.civmc.shards.paper.border.BorderEntitySweep;
 import net.civmc.shards.paper.border.BorderOutlook;
 import net.civmc.shards.paper.border.BorderRenderer;
 import net.civmc.shards.paper.border.BorderView;
@@ -69,6 +70,7 @@ public final class ShardsPaperPlugin extends JavaPlugin {
     private TransferService transfers;
     private ShardsServer mirrorServer;
     private MirrorView mirror;
+    private BorderEntitySweep entitySweep;
     private MirrorStore mirrorStore;
     private final ShardBorder border = new ShardBorder();
     // Read from the login thread, written from whichever thread the startup answer arrives on
@@ -111,6 +113,7 @@ public final class ShardsPaperPlugin extends JavaPlugin {
         getCommand("shardsnapshot").setExecutor(new SnapshotVerifyCommand());
         startSkySync();
         startUnownedEntityView();
+        startEntitySweep();
         startMirror(outlook);
         startPeriodicSave();
         startBorderView(this.view);
@@ -206,6 +209,21 @@ public final class ShardsPaperPlugin extends JavaPlugin {
             final List<MirrorStore.Saved> chunks = mirror.toSave();
             getServer().getScheduler().runTaskAsynchronously(this, () -> store.save(chunks));
         }, MIRROR_SAVE_TICKS, MIRROR_SAVE_TICKS);
+    }
+
+    /**
+     * Stops the entities that drift over a border and have no move event to refuse.
+     *
+     * <p>Mobs and vehicles are answered by their own move events, exactly and for nothing. A dropped
+     * item, an arrow, primed TNT, a falling block and an experience orb have no such event, so the
+     * only way to catch one crossing is to look - every tick, at the border chunks that are
+     * loaded.</p>
+     */
+    private void startEntitySweep() {
+        final BorderEntitySweep sweep = new BorderEntitySweep(this.border, getLogger());
+        this.entitySweep = sweep;
+        getServer().getPluginManager().registerEvents(sweep, this);
+        getServer().getScheduler().runTaskTimer(this, () -> sweep.sweep(getServer().getWorlds()), 1L, 1L);
     }
 
     /**
@@ -408,6 +426,14 @@ public final class ShardsPaperPlugin extends JavaPlugin {
             getLogger().info("This server owns no shard areas, so no border is enforced");
         } else {
             getLogger().info("Enforcing " + response.regions().size() + " shard area(s)");
+        }
+        // Only now is there a border to measure a chunk against, so every chunk loaded up to this
+        // point had a load event that could say nothing about it - the spawn chunks among them. On the
+        // main thread because that is the only place a world's loaded chunks can be asked for, and
+        // this answer arrives on a broker thread
+        if (this.entitySweep != null) {
+            getServer().getScheduler().runTask(this,
+                () -> this.entitySweep.watchWhatIsAlreadyLoaded(getServer().getWorlds()));
         }
     }
 
