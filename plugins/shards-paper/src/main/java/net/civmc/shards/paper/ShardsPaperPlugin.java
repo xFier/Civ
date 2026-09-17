@@ -17,6 +17,8 @@ import net.civmc.shards.paper.border.ShardBorderListener;
 import net.civmc.shards.paper.border.ShardRespawnListener;
 import net.civmc.shards.paper.border.TransferService;
 import net.civmc.shards.paper.config.ShardsPaperConfig;
+import net.civmc.shards.paper.mirror.UnownedEntityView;
+import net.civmc.shards.paper.mirror.UnownedGroundListener;
 import net.civmc.shards.paper.playerdata.OwnedPlayers;
 import net.civmc.shards.paper.playerdata.PlayerDataListener;
 import net.civmc.shards.paper.rabbitmq.ShardsClient;
@@ -36,6 +38,7 @@ public final class ShardsPaperPlugin extends JavaPlugin {
     // Half a second: often enough that the particles look continuous and that a neighbour going down
     // is noticed while the player is still stood at the border, rare enough to be nothing on a tick
     private static final long BORDER_VIEW_TICKS = 10L;
+    private static final long UNOWNED_SWEEP_TICKS = 20L * 5L;
     private static final long STARTUP_RETRY_MIN_TICKS = 20L * 5L;
     private static final long STARTUP_RETRY_MAX_TICKS = 20L * 60L;
 
@@ -84,6 +87,7 @@ public final class ShardsPaperPlugin extends JavaPlugin {
             new ShardRespawnListener(this, this.border, this.transfers, getLogger()), this);
         getCommand("shardsnapshot").setExecutor(new SnapshotVerifyCommand());
         startSkySync();
+        startUnownedEntityView();
         startPeriodicSave();
         startBorderView(this.view);
     }
@@ -117,6 +121,32 @@ public final class ShardsPaperPlugin extends JavaPlugin {
             case PARTICLES -> new ParticleBorderRenderer();
             case GLASS -> new GlassBorderRenderer(this);
         };
+    }
+
+    /**
+     * Stops this server showing, and stops it creating, entities on ground it does not own.
+     *
+     * <p>The world does not stop at a border, so this server populates the chunks past its edge with
+     * a copy of nothing anybody else can see - a herd of cows standing where the neighbour has a
+     * building. The first piece of showing what is really over there is to stop drawing what is
+     * not.</p>
+     */
+    private void startUnownedEntityView() {
+        if (!this.config.hideUnownedEntities()) {
+            getLogger().warning("Not hiding entities on unowned ground: players will see this server's own "
+                + "mobs and items standing past its border, which no other shard can see");
+            return;
+        }
+        final UnownedEntityView view = new UnownedEntityView(this, this.border);
+        getServer().getPluginManager().registerEvents(view, this);
+        getServer().getPluginManager().registerEvents(new UnownedGroundListener(this.border), this);
+        // Slow, because it only exists to catch entities that wandered out after they were already
+        // being shown. Everything arriving is caught by the tracking event, which costs nothing
+        getServer().getScheduler().runTaskTimer(this, () -> {
+            for (final Player player : Bukkit.getOnlinePlayers()) {
+                view.sweep(player);
+            }
+        }, UNOWNED_SWEEP_TICKS, UNOWNED_SWEEP_TICKS);
     }
 
     /**

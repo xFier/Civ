@@ -37,6 +37,21 @@ arrival:
 # Set to 0 to leave this server's sky to itself.
 sky-sync-seconds: 5
 
+# Whether this server stops spawning, and stops showing, entities on ground it does not own.
+#
+# The world does not stop at a border: this server loads and ticks the chunks past its edge and fills
+# them with its own mobs and items. None of it is real. The shard that owns that ground has its own,
+# different contents there and cannot see any of this - so looking across a border shows a herd of
+# cows standing where a neighbour's building is, visible to nobody else.
+#
+# Nothing is ever removed, only hidden, because an entity out there is still a real one of this
+# server's and deleting it would be destroying somebody's dropped items or their minecart.
+#
+# Note this changes what can be farmed near a border: mobs that used to spawn past it were never
+# legitimately this shard's, so anything relying on both shards spawning in the same field loses half
+# its rate. Set to false to go back to the old behaviour while judging that.
+hide-unowned-entities: true
+
 # What the border between shards is drawn with, where a player can see one.
 #
 #   particles  coloured dust, repainted twice a second. Nothing exists in the world between passes,
