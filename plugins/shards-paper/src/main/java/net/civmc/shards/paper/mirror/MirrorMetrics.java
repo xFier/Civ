@@ -34,6 +34,8 @@ public final class MirrorMetrics {
     private final AtomicLong diffedWorstNanos = new AtomicLong();
     private final AtomicLong worstChangedBlocks = new AtomicLong();
 
+    private final AtomicLong missedAnnouncements = new AtomicLong();
+
     /**
      * One chunk read and encoded for a neighbour. Called on whichever thread did the work.
      *
@@ -69,6 +71,17 @@ public final class MirrorMetrics {
     }
 
     /**
+     * One announcement that never arrived, noticed because the next one did not follow on from the
+     * last. Worth counting on its own: the fanout has no acknowledgement of any kind, so before the
+     * numbering there was no way to know whether this was happening at all, and the answer decides
+     * whether the mirror can be trusted without re-reading. A restart of a neighbour counts here too,
+     * which is the one benign cause.
+     */
+    public void missedAnnouncement() {
+        this.missedAnnouncements.incrementAndGet();
+    }
+
+    /**
      * Says what has happened since the last time it was asked, and forgets it. Silent when nothing
      * has - a quiet border should not be writing to the log every half minute.
      */
@@ -96,6 +109,11 @@ public final class MirrorMetrics {
                 millis(this.diffedWorstNanos.getAndSet(0L)),
                 this.changedBlocks.getAndSet(0L) / diffedCount,
                 this.worstChangedBlocks.getAndSet(0L)));
+        }
+        final long missed = this.missedAnnouncements.getAndSet(0L);
+        if (missed > 0L) {
+            logger.info("Mirror missed " + missed + " block announcement(s) and read those chunk(s) "
+                + "again; a neighbour restarting counts here too");
         }
     }
 
