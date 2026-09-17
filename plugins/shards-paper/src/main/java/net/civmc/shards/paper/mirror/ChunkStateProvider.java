@@ -9,7 +9,6 @@ import net.civmc.shards.api.mirror.ChunkSectionState;
 import net.civmc.shards.api.mirror.ChunkState;
 import net.civmc.shards.paper.border.ShardBorder;
 import org.bukkit.Bukkit;
-import org.bukkit.Chunk;
 import org.bukkit.ChunkSnapshot;
 import org.bukkit.World;
 
@@ -27,9 +26,11 @@ import org.bukkit.World;
 public final class ChunkStateProvider {
 
     private final ShardBorder border;
+    private final ChunkRevisions revisions;
 
-    public ChunkStateProvider(final ShardBorder border) {
+    public ChunkStateProvider(final ShardBorder border, final ChunkRevisions revisions) {
         this.border = border;
+        this.revisions = revisions;
     }
 
     /**
@@ -37,7 +38,15 @@ public final class ChunkStateProvider {
      *     a tick to take the snapshot on. Latency, not work - the server is idle for most of it
      * @param buildNanos turning the snapshot into sections. Real work, off the main thread
      */
-    public record ChunkRead(ChunkState state, long waitNanos, long buildNanos) {
+    public record ChunkRead(ChunkState state, long waitNanos, long buildNanos, String publisherId,
+                            long revision) {
+    }
+
+    /**
+     * A snapshot and the announcement number in force when it was taken, read together on the main
+     * thread so nothing can be announced between the two. See {@link ChunkRevisions}.
+     */
+    private record Taken(ChunkSnapshot snapshot, long revision) {
     }
 
     /**
@@ -56,14 +65,19 @@ public final class ChunkStateProvider {
                 new IllegalArgumentException("This shard owns no part of chunk " + chunkX + ", " + chunkZ));
         }
         final long askedAt = System.nanoTime();
+        final ChunkKey key = new ChunkKey(worldName, chunkX, chunkZ);
         return world.getChunkAtAsync(chunkX, chunkZ)
             // Still on the main thread, and deliberately only this: a snapshot is a copy, and copying
-            // is all the main thread should be asked to do for somebody else's rendering
-            .thenApply(Chunk::getChunkSnapshot)
-            .thenApplyAsync(snapshot -> {
+            // is all the main thread should be asked to do for somebody else's rendering. The
+            // announcement number is read here too, because taken anywhere else it could be a number
+            // either side of this snapshot rather than the one that matches it
+            .thenApply(chunk -> new Taken(chunk.getChunkSnapshot(), this.revisions.current(key)))
+            .thenApplyAsync(taken -> {
                 final long snapshotAt = System.nanoTime();
-                final ChunkState state = toState(snapshot, world.getMinHeight(), world.getMaxHeight());
-                return new ChunkRead(state, snapshotAt - askedAt, System.nanoTime() - snapshotAt);
+                final ChunkState state = toState(taken.snapshot(), world.getMinHeight(),
+                    world.getMaxHeight());
+                return new ChunkRead(state, snapshotAt - askedAt, System.nanoTime() - snapshotAt,
+                    this.revisions.publisherId(), taken.revision());
             });
     }
 

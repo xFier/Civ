@@ -17,6 +17,7 @@ import net.civmc.shards.paper.border.ShardBorderListener;
 import net.civmc.shards.paper.border.ShardRespawnListener;
 import net.civmc.shards.paper.border.TransferService;
 import net.civmc.shards.paper.config.ShardsPaperConfig;
+import net.civmc.shards.paper.mirror.ChunkRevisions;
 import net.civmc.shards.paper.mirror.ChunkStateProvider;
 import net.civmc.shards.paper.mirror.MirrorMetrics;
 import net.civmc.shards.paper.mirror.MirrorPlayerPublisher;
@@ -185,13 +186,16 @@ public final class ShardsPaperPlugin extends JavaPlugin {
             return;
         }
         final MirrorMetrics metrics = new MirrorMetrics();
+        // Shared by the two halves that have to agree on one count: the publisher that numbers an
+        // announcement, and the provider that says which number a snapshot was taken at
+        final ChunkRevisions revisions = new ChunkRevisions();
         final MirrorPlayers players = startPlayerMirror();
         // As far as the client renders, which is what has to look right. The neighbour's own view
         // distance does not come into it - it is this server's players who are looking
         final MirrorView mirror = new MirrorView(this, this.border, outlook, this.client,
             this.config.serverName(), getLogger(), getServer().getViewDistance(), metrics);
         this.mirrorServer = new ShardsServer(this.config.connectionFactory(), this.config.serverName(), this,
-            getLogger(), new ChunkStateProvider(this.border), metrics,
+            getLogger(), new ChunkStateProvider(this.border, revisions), metrics,
             // Announcements arrive on a broker thread and these read the world and send to players
             update -> getServer().getScheduler().runTask(this, () -> mirror.applyUpdate(update)),
             positions -> getServer().getScheduler().runTask(this, () -> players.apply(positions)));
@@ -204,7 +208,7 @@ public final class ShardsPaperPlugin extends JavaPlugin {
         // Tells the other shards what has just changed here, so none of them has to re-read a chunk to
         // find out. Flushed once a tick: a block changed several times in one tick is sent once
         final MirrorUpdatePublisher publisher = new MirrorUpdatePublisher(this.border, this.client,
-            this.config.serverName(), getLogger());
+            this.config.serverName(), getLogger(), revisions);
         getServer().getPluginManager().registerEvents(publisher, this);
         getServer().getScheduler().runTaskTimer(this, publisher::flush, 1L, 1L);
 

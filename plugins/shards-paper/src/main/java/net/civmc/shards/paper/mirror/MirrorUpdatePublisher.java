@@ -73,17 +73,21 @@ public final class MirrorUpdatePublisher implements Listener {
     private final ShardsClient client;
     private final String serverName;
     private final Logger logger;
+    private final ChunkRevisions revisions;
     // Positions changed this tick, read at the end of it. A set, so a block changed several times in
     // one tick is read once and published once
     private final Set<Block> dirty = new HashSet<>();
     private boolean warnedAboutFlood;
+    // Blocks were dropped this tick, so what is published does not describe everything that changed
+    private boolean lostBlocksThisTick;
 
     public MirrorUpdatePublisher(final ShardBorder border, final ShardsClient client, final String serverName,
-                                 final Logger logger) {
+                                 final Logger logger, final ChunkRevisions revisions) {
         this.border = border;
         this.client = client;
         this.serverName = serverName;
         this.logger = logger;
+        this.revisions = revisions;
     }
 
     /**
@@ -102,9 +106,20 @@ public final class MirrorUpdatePublisher implements Listener {
                     block.getBlockData().getAsString()));
         }
         this.dirty.clear();
+        // Any chunk published on a tick that lost blocks may be missing some of them, and there is no
+        // telling which: the cap is on the tick, not on one chunk. Numbering these with a gap has
+        // every viewer read the chunk rather than accept a partial account of it as the whole story.
+        // A chunk that lost *all* of its blocks is published not at all and still falls to the
+        // backstop, which is what it did before this and is as far as a cap can be made honest
+        final boolean partial = this.lostBlocksThisTick;
+        this.lostBlocksThisTick = false;
         for (final Map.Entry<ChunkKey, List<BlockUpdate>> chunk : byChunk.entrySet()) {
+            final long revision = partial
+                ? this.revisions.nextWithGap(chunk.getKey())
+                : this.revisions.next(chunk.getKey());
             this.client.publishMirrorUpdate(ChunkUpdateMessage.create(this.serverName, chunk.getKey().world(),
-                chunk.getKey().x(), chunk.getKey().z(), chunk.getValue()));
+                chunk.getKey().x(), chunk.getKey().z(), chunk.getValue(), this.revisions.publisherId(),
+                revision));
         }
     }
 
@@ -121,10 +136,12 @@ public final class MirrorUpdatePublisher implements Listener {
             return;
         }
         if (this.dirty.size() >= MAX_PER_TICK) {
+            this.lostBlocksThisTick = true;
             if (!this.warnedAboutFlood) {
                 this.warnedAboutFlood = true;
                 this.logger.warning("More than " + MAX_PER_TICK + " blocks changed near a border in one tick; "
-                    + "the rest will not be mirrored until the chunk is read again");
+                    + "the rest will not be published, and the chunks that were will be read again by "
+                    + "whoever is looking at them");
             }
             return;
         }

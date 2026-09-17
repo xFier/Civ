@@ -200,8 +200,10 @@ public final class MirrorView implements Listener {
         // neighbour's chunk, thrown away, which can also land an older answer on top of a newer one
         try {
             final ChunkState state = ChunkStateCodec.fromBytes(Base64.getDecoder().decode(response.state()));
+            final String publisherId = response.publisherId();
+            final long revision = response.revision();
             diff(key, state).whenComplete((blocks, failure) -> Bukkit.getScheduler().runTask(this.plugin,
-                () -> installed(key, blocks, failure)));
+                () -> installed(key, blocks, failure, publisherId, revision)));
         } catch (final RuntimeException unreadable) {
             this.logger.log(Level.WARNING, "Could not read " + key + " as its owner sent it", unreadable);
             this.inFlight.remove(key);
@@ -213,13 +215,13 @@ public final class MirrorView implements Listener {
      * its answer has arrived. Main thread.
      */
     private void installed(final ChunkKey key, final Map<Position, BlockData> blocks,
-                           final Throwable failure) {
+                           final Throwable failure, final String publisherId, final long revision) {
         try {
             if (failure != null) {
                 this.logger.log(Level.FINE, "Could not compare " + key + " with our own copy", failure);
                 return;
             }
-            install(key, blocks);
+            install(key, blocks, publisherId, revision);
         } finally {
             this.inFlight.remove(key);
         }
@@ -235,7 +237,8 @@ public final class MirrorView implements Listener {
      *
      * <p>Main thread: it reads this server's own world, and it decides who has to be told again.</p>
      */
-    private void install(final ChunkKey key, final Map<Position, BlockData> blocks) {
+    private void install(final ChunkKey key, final Map<Position, BlockData> blocks,
+                         final String publisherId, final long revision) {
         final Mirrored previous = this.mirrored.get(key);
         // Announced while this was being read, so of the two pictures this is the older one
         final boolean overtaken = this.changedWhileFetching.remove(key);
@@ -256,7 +259,8 @@ public final class MirrorView implements Listener {
                 }
             }
         }
-        this.mirrored.put(key, new Mirrored(blocks, send, System.nanoTime(), overtaken));
+        this.mirrored.put(key, new Mirrored(blocks, send, System.nanoTime(), overtaken, publisherId,
+            revision));
         if (previous != null && previous.blocks().equals(blocks)) {
             // Nothing has changed over there, so nobody needs telling again
             return;
@@ -378,6 +382,19 @@ public final class MirrorView implements Listener {
         if (current == null) {
             return;
         }
+        final boolean sameNumbering = update.publisherId().equals(current.publisherId());
+        if (sameNumbering && update.revision() <= current.revision()) {
+            // Already accounted for. The broker can hand the same message over twice, and applying an
+            // old one again would put back a block that has since changed
+            return;
+        }
+        // Either a number was skipped, or the owner has restarted and is numbering from the start
+        // again. What has arrived is still the most recent thing we know, so it is applied - but
+        // something between here and the last one is missing, and only a full read can say what
+        final boolean missedOne = !sameNumbering || update.revision() != current.revision() + 1L;
+        if (missedOne) {
+            this.metrics.missedAnnouncement();
+        }
         final World world = Bukkit.getWorld(update.world());
         if (world == null) {
             return;
@@ -399,7 +416,8 @@ public final class MirrorView implements Listener {
             }
         }
         // Keeps the fetch time, because nothing has been re-read - only corrected
-        this.mirrored.put(key, new Mirrored(blocks, blocks, current.fetchedAtNanos(), current.stale()));
+        this.mirrored.put(key, new Mirrored(blocks, blocks, current.fetchedAtNanos(),
+            current.stale() || missedOne, update.publisherId(), update.revision()));
         for (final Player viewer : Bukkit.getOnlinePlayers()) {
             final Set<ChunkKey> alreadyShown = this.shown.get(viewer.getUniqueId());
             if (alreadyShown != null && alreadyShown.contains(key)) {
@@ -434,14 +452,19 @@ public final class MirrorView implements Listener {
      * @param blocks what the owner has where we have something else
      * @param send the same, plus anything that was in the last picture and is not in this one, put
      *     back to this server's own copy so a demolished building does not stand forever
-     * @param stale a change was announced while this was being read, so it is shown but read again on
+     * @param stale this picture is known to be behind - a change was announced while the chunk was
+     *     being read, or an announcement was missed - so it is shown, but the chunk is read again on
      *     the next pass rather than waiting out the backstop
+     * @param publisherId which run of the owning server numbered the announcements this picture counts
+     * @param revision the last announcement about this chunk that is accounted for here. See
+     *     {@link ChunkRevisions}
      */
     private record Mirrored(Map<Position, BlockData> blocks, Map<Position, BlockData> send,
-                            long fetchedAtNanos, boolean stale) {
+                            long fetchedAtNanos, boolean stale, String publisherId, long revision) {
 
         Mirrored readAgain() {
-            return new Mirrored(this.blocks(), this.send(), this.fetchedAtNanos(), true);
+            return new Mirrored(this.blocks(), this.send(), this.fetchedAtNanos(), true,
+                this.publisherId(), this.revision());
         }
     }
 }
