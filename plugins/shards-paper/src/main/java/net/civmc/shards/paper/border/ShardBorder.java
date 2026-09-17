@@ -1,8 +1,10 @@
 package net.civmc.shards.paper.border;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
+import net.civmc.shards.api.region.ShardPoint;
 import net.civmc.shards.api.region.ShardRegion;
 import org.bukkit.Location;
 
@@ -49,36 +51,102 @@ public final class ShardBorder {
     }
 
     /**
-     * The closest border within {@code radius} blocks, or empty if the player is nowhere near one.
+     * Every face of this shard's outline within {@code radius} blocks, nearest first.
      *
-     * <p>Searched along the four axis directions rather than by measuring to the region outline.
-     * Every edge runs along an axis, so a border within reach is always found this way, and asking
-     * {@link #containsBlock} the same question the crossing itself will ask means the answer cannot
-     * disagree with it by a block - which at a seam is the whole hazard.</p>
+     * <p>A face is one block of ours with one block of somebody else's beside it, so this describes
+     * the border exactly as it really runs - round corners, along a notch where a chunk has been given
+     * to a neighbour, and with a stretch that can be crossed sitting next to one that cannot. That is
+     * the whole reason it is a list of faces rather than a line: a shard's outline is a rectilinear
+     * polygon, and no single straight edge, and no square, can stand in for one.</p>
      *
-     * <p>Costs at most {@code 4 * radius} containment tests, run only when a player changes block.</p>
+     * <p>Costs a containment test per block in the square around the player, so it is preceded by
+     * {@link #outlineWithin}, which costs a handful of comparisons and says no for everybody who is
+     * not actually near a border. Callers are expected to hold on to the answer until the player
+     * changes block: the outline does not move under them, only what lies beyond it does.</p>
+     *
+     * @param limit the most faces to return, nearest kept. A jagged outline can have a great many
+     *     within sight, and drawing every one of them is a packet each
      */
-    public Optional<EdgeSighting> nearestEdge(final int blockX, final int blockZ, final int radius) {
-        if (this.regions.get().isEmpty()) {
-            return Optional.empty();
+    public List<EdgeSighting> facesWithin(final int blockX, final int blockZ, final int radius, final int limit) {
+        if (!outlineWithin(blockX, blockZ, radius)) {
+            return List.of();
         }
-        EdgeSighting nearest = null;
-        for (final int[] step : STEPS) {
-            for (int distance = 1; distance <= radius; distance++) {
-                if (nearest != null && distance >= nearest.distance()) {
-                    // A closer edge was already found in another direction, so the rest of this line
-                    // cannot win
-                    break;
-                }
-                final int x = blockX + step[0] * distance;
-                final int z = blockZ + step[1] * distance;
+        final List<EdgeSighting> faces = new ArrayList<>();
+        for (int x = blockX - radius; x <= blockX + radius; x++) {
+            for (int z = blockZ - radius; z <= blockZ + radius; z++) {
                 if (isOutside(x, z)) {
-                    nearest = new EdgeSighting(distance, x, z, step[0], step[1]);
-                    break;
+                    // Only our own blocks have faces. Asking the same question from the other side
+                    // would draw the outline of ground we are not authoritative for
+                    continue;
+                }
+                for (final int[] step : STEPS) {
+                    if (isOutside(x + step[0], z + step[1])) {
+                        faces.add(new EdgeSighting(
+                            Math.max(Math.abs(x + step[0] - blockX), Math.abs(z + step[1] - blockZ)),
+                            x + step[0], z + step[1], step[0], step[1]));
+                    }
                 }
             }
         }
-        return Optional.ofNullable(nearest);
+        faces.sort(Comparator.comparingInt(EdgeSighting::distance));
+        return faces.size() <= limit ? List.copyOf(faces) : List.copyOf(faces.subList(0, limit));
+    }
+
+    /**
+     * Whether any of this server's areas has an edge running within {@code radius} blocks.
+     *
+     * <p>The cheap half of {@link #facesWithin}: it walks the corners of each area rather than the
+     * blocks around the player, so it costs the same handful of comparisons wherever they stand.</p>
+     *
+     * <p>Measured against the outline itself rather than by looking outward along the four axes from
+     * the player, which is the same mistake as drawing the border from one straight edge: a notch or
+     * a corner off to one side is within sight and on none of those four lines, so a player walking
+     * past one would be shown nothing at all.</p>
+     *
+     * <p>May say yes where the real answer is no - two of this server's own areas meeting have an
+     * edge with no face on it - which costs one wasted scan and never a missing border.</p>
+     */
+    public boolean outlineWithin(final int blockX, final int blockZ, final int radius) {
+        for (final ShardRegion region : this.regions.get()) {
+            final List<ShardPoint> corners = region.vertices();
+            for (int index = 0; index < corners.size(); index++) {
+                if (edgeWithin(corners.get(index), corners.get((index + 1) % corners.size()),
+                    blockX, blockZ, radius)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether one edge of an area passes within {@code radius} blocks.
+     *
+     * <p>Corners sit on the grid lines between blocks, so an edge at coordinate {@code c} separates
+     * the blocks {@code c - 1} and {@code c}: the nearer of those two is what the distance is
+     * measured to. Along the edge, anywhere between its ends is a distance of nothing, and past
+     * either end it is the distance to the last block the edge actually runs beside - the upper end
+     * exclusive, matching the rule that decides ownership.</p>
+     */
+    private static boolean edgeWithin(final ShardPoint from, final ShardPoint to, final int blockX,
+                                      final int blockZ, final int radius) {
+        final boolean runsAlongZ = from.x() == to.x();
+        final int across = runsAlongZ ? from.x() : from.z();
+        final int alongLow = Math.min(runsAlongZ ? from.z() : from.x(), runsAlongZ ? to.z() : to.x());
+        final int alongHigh = Math.max(runsAlongZ ? from.z() : from.x(), runsAlongZ ? to.z() : to.x());
+        final int blockAcross = runsAlongZ ? blockX : blockZ;
+        final int blockAlong = runsAlongZ ? blockZ : blockX;
+
+        final int distanceAcross = Math.min(Math.abs(blockAcross - across), Math.abs(blockAcross - (across - 1)));
+        final int distanceAlong;
+        if (blockAlong < alongLow) {
+            distanceAlong = alongLow - blockAlong;
+        } else if (blockAlong >= alongHigh) {
+            distanceAlong = blockAlong - (alongHigh - 1);
+        } else {
+            distanceAlong = 0;
+        }
+        return Math.max(distanceAcross, distanceAlong) <= radius;
     }
 
     public boolean isOutside(final int blockX, final int blockZ) {

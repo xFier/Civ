@@ -158,9 +158,10 @@ public final class TransferService {
             return false;
         }
 
-        // Before the handover, because a virtual world border outlives the reason it was sent: a
-        // player carried across while one was up would arrive walled in by the shard they just left
-        this.view.clear(player);
+        // What they were being shown belongs to the shard they are leaving, and the faces of it were
+        // worked out for a block on this side. Particles expire on their own, but the outline behind
+        // them would otherwise be handed to the arriving shard as though it were still true
+        this.view.forget(playerUuid);
 
         // Taken out of this world before the handover is sent, not after it is confirmed. Between
         // sending and being told it worked the destination may already have rebuilt it, so removing

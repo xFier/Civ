@@ -39,8 +39,15 @@ public final class ShardPlacementService {
     public Optional<String> shardFor(final PlayerLocation location) {
         // Floor rather than cast: a cast truncates towards zero, which would put someone standing at
         // x = -0.5 on block 0 instead of block -1, and so on the wrong side of a border at zero
-        final int blockX = (int) Math.floor(location.x());
-        final int blockZ = (int) Math.floor(location.z());
+        return shardForBlock((int) Math.floor(location.x()), (int) Math.floor(location.z()));
+    }
+
+    /**
+     * @param blockX block coordinate, i.e. already floored
+     * @param blockZ block coordinate, i.e. already floored
+     * @return the shard owning that block, or empty if no configured shard does
+     */
+    public Optional<String> shardForBlock(final int blockX, final int blockZ) {
         for (final Map.Entry<String, List<ShardRegion>> shardEntry : this.shardsConfig.shards().entrySet()) {
             for (final ShardRegion region : shardEntry.getValue()) {
                 if (region.containsBlock(blockX, blockZ)) {
