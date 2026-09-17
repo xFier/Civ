@@ -19,6 +19,8 @@ import org.spongepowered.configurate.yaml.YamlConfigurationLoader;
  *
  * @param shards the areas each shard owns, keyed by the server name the shard runs on
  * @param holdingServer where a player whose shard cannot be determined is sent
+ * @param networkList whether this proxy answers /list for the whole network, taking the name off
+ *     the shards, each of which knows only its own players
  * @param lockExpirySeconds how long a shard must go without answering before the players it is
  *     holding are let go. Zero leaves them held until it comes back, which is what happened before
  *     this key existed
@@ -29,6 +31,7 @@ public record ShardsConfig(
     String holdingServer,
     String failureMessage,
     Integer lockExpirySeconds,
+    Boolean networkList,
     DatabaseConfig database,
     RabbitMqConfig rabbitmq
 ) {
@@ -44,6 +47,9 @@ public record ShardsConfig(
         }
         // Absent keys arrive as null, so fall back to the previous defaults
         holdingServer = holdingServer == null ? "" : holdingServer.trim();
+        // On by default: a network that reads as several half-empty servers is the thing the shards
+        // are meant to hide, and a proxy that answers this is the only side that can
+        networkList = networkList == null || networkList;
         // A minute of silence: long enough that a shard pausing under load is not mistaken for a dead
         // one, short enough that somebody logging in after a crash is not left waiting on an operator
         lockExpirySeconds = lockExpirySeconds == null ? 60 : lockExpirySeconds;

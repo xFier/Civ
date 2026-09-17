@@ -42,6 +42,12 @@ shards:
 
 holding-server: "pvp"
 
+# Whether this proxy answers /list for the whole network. A shard's own /list knows only the people
+# on it, so a network spread evenly across shards reads as several half-empty servers. Registering
+# the name here is what takes it off the shards - a command the proxy owns never reaches a backend -
+# so set this to false if something else on this network should answer /list instead.
+network-list: true
+
 # A lock on a player's data is only ever released by the server holding it, so a shard that dies
 # and does not come back keeps its players unclaimable. After this many seconds of a shard not
 # answering - and only while the proxy has nobody connected to it - its locks are dropped and those
