@@ -21,6 +21,19 @@ arrival:
   title: ""
   subtitle: ""
 
+# What the border between shards is drawn with, where a player can see one.
+#
+#   particles  coloured dust, repainted twice a second. Nothing exists in the world between passes,
+#              so there is nothing to clean up and nothing for another plugin to trip over. A client
+#              set to minimal particles is shown no border at all, which is the catch.
+#   glass      a pane of stained glass per face, blue where a crossing will work and red where it
+#              will not. These are display entities, so they render whatever the particle setting
+#              says - but they are real entities in the world, and other plugins can see them.
+#
+# Neither is guaranteed to be drawn: entity render distance is a client setting too. The only thing
+# that always renders is blocks actually placed in the world, which is not something this will ever do.
+border-style: particles
+
 # This server holds no database credentials. It reaches its player data by asking the proxy over
 # RabbitMQ, and the proxy is the only thing that reads or writes the store.
 rabbitmq:
