@@ -32,8 +32,14 @@ import org.joml.Vector3f;
  *
  * <p>Glass rather than a text display's coloured background. A text display would give arbitrary
  * colour at the cost of sizing everything through text metrics; the border has two colours, and
- * stained glass has both of them. Slats also have real depth and take real light, which reads as a
+ * stained glass has both of them. Panes also have real depth and take real light, which reads as a
  * thing standing in the world rather than a decal painted on it.</p>
+ *
+ * <p>Each pane stands in the open space the player is in, found by looking down from their own level
+ * rather than down from the sky. That is what puts the border on the lake bed instead of the lake, on
+ * the cave floor instead of the hillside overhead, and on the ground under a tree instead of in its
+ * canopy - and it is why a border running into a hillside simply stops being drawn rather than being
+ * drawn inside the rock.</p>
  *
  * <p>Everything is per player, which is what makes this usable at all: displays are real entities and
  * would otherwise be shown to everybody, including people on the far side who are not being told
@@ -48,17 +54,26 @@ public final class GlassBorderRenderer implements BorderRenderer {
     // appearing rather than flicker
     private static final int SPAWN_RADIUS = 12;
     private static final int KEEP_RADIUS = 16;
-    private static final int MAX_FACES = 48;
-    // Beyond this, every other pane along a run is left out. Halves the count on a long straight
-    // stretch, where the gap is not the detail anybody is looking at
-    private static final int SOLID_WITHIN = 8;
+    // The most panes one player is shown, spent on the nearest faces. Faces are handed over well past
+    // this so that the ones inside the spawn radius are never crowded out by ones in the keep band
+    // that are not going to be drawn at all
+    private static final int MAX_PANES = 48;
+    private static final int HANDED_OVER = 160;
 
     private static final float THICKNESS = 0.08F;
-    private static final float HEIGHT = 2.5F;
-    // A pane stands on the ground under its own face where the ground is near the player, and at the
-    // player's own level where it is not - underground, or flying. Sampled once, when the face comes
-    // into the window
-    private static final int GROUND_SEARCH = 4;
+    // Tall enough to read as a wall, and it starts a block below the floor rather than on it. That
+    // buried block is the point: neighbouring faces on a slope stand at different heights, and
+    // without the overlap the border comes apart into a staircase with a gap at every step
+    private static final float HEIGHT = 4.0F;
+    private static final int SUNK = 1;
+    // How far above the player a pane will look for open space before giving up on the face, and how
+    // far below it will follow that space down to a floor
+    private static final int OPEN_ABOVE = 4;
+    private static final int FLOOR_BELOW = 8;
+    // What the client uses to decide the pane is off screen. Left at the entity's own size, a pane
+    // scaled well past it is culled while plainly in view
+    private static final float CULLING_WIDTH = 2.0F;
+    private static final float CULLING_HEIGHT = HEIGHT + 2.0F;
     // Entity render distance is a client setting that this multiplies against, so it is set well past
     // the window rather than trimmed to it: the saving is not worth a border that fades out at ten
     // blocks for anybody playing on a low setting
@@ -89,7 +104,7 @@ public final class GlassBorderRenderer implements BorderRenderer {
 
     @Override
     public int limit() {
-        return MAX_FACES;
+        return HANDED_OVER;
     }
 
     @Override
@@ -98,7 +113,7 @@ public final class GlassBorderRenderer implements BorderRenderer {
             // Which is almost everybody, almost all the time
             return;
         }
-        final Map<Pane, Boolean> wanted = wanted(faces);
+        final Map<Pane, Boolean> wanted = wanted(at.getWorld(), at.getBlockY(), faces);
         final Map<Pane, Standing> standing =
             this.shown.computeIfAbsent(player.getUniqueId(), uuid -> new HashMap<>());
 
@@ -126,8 +141,7 @@ public final class GlassBorderRenderer implements BorderRenderer {
             if (standing.containsKey(entry.getKey())) {
                 continue;
             }
-            final BlockDisplay display =
-                raise(player, at.getWorld(), at.getBlockY(), entry.getKey(), entry.getValue());
+            final BlockDisplay display = raise(player, at.getWorld(), entry.getKey(), entry.getValue());
             standing.put(entry.getKey(), new Standing(display, entry.getValue()));
             grown.add(Map.entry(entry.getKey(), display));
         }
@@ -145,37 +159,76 @@ public final class GlassBorderRenderer implements BorderRenderer {
     }
 
     /**
-     * Which panes should be standing, and what colour.
+     * Which panes should be standing, where, and what colour.
      *
      * <p>Only faces inside the spawn radius are wanted, while everything out to the keep radius is
-     * left alone by the caller - that gap is the hysteresis. Past {@link #SOLID_WITHIN} every other
-     * pane along a run is dropped, except at the ends of runs: those are the corners, and thinning
-     * that erased a corner would erase the shape this exists to show.</p>
+     * left standing by the caller - that gap is the hysteresis. Every face in range gets a pane;
+     * dropping every other one further out was tried and is what made the border read as a row of
+     * rectangles rather than a wall.</p>
+     *
+     * <p>The cap is spent nearest first. The faces arrive sorted, so stopping at the limit keeps the
+     * panes closest to the player, which are the ones they are looking at - a jagged outline can
+     * otherwise spend the whole budget on faces off to the side.</p>
      */
-    private static Map<Pane, Boolean> wanted(final List<DrawnFace> faces) {
-        final Set<Pane> present = new HashSet<>();
-        for (final DrawnFace drawn : faces) {
-            present.add(Pane.of(drawn.face()));
-        }
+    private static Map<Pane, Boolean> wanted(final World world, final int playerY,
+                                             final List<DrawnFace> faces) {
         final Map<Pane, Boolean> wanted = new HashMap<>();
         for (final DrawnFace drawn : faces) {
             final EdgeSighting face = drawn.face();
-            if (face.distance() > SPAWN_RADIUS) {
+            if (face.distance() > SPAWN_RADIUS || wanted.size() == MAX_PANES) {
                 // Sorted nearest first, so everything past here is further still
                 break;
             }
-            final Pane pane = Pane.of(face);
-            if (face.distance() > SOLID_WITHIN && !pane.turnsAt(present) && pane.along() % 2 != 0) {
+            final Integer base = baseUnder(world, face.insideX(), face.insideZ(), playerY);
+            if (base == null) {
+                // Solid from the player's own level upwards, so there is nowhere at this face a pane
+                // could be seen. Where the border runs into a hillside it stops being drawn, which is
+                // the truth: glass inside rock is not a border anybody can see
                 continue;
             }
-            wanted.put(pane, drawn.crossable());
+            wanted.put(new Pane(face.insideX(), face.insideZ(), face.seamCoordinate(), face.alongX(), base),
+                drawn.crossable());
         }
         return wanted;
     }
 
-    private BlockDisplay raise(final Player player, final World world, final int playerY, final Pane pane,
+    /**
+     * Where a pane at this column should stand, or null if it would only ever be inside rock.
+     *
+     * <p>Found by looking for the open space the player themselves is in and following its floor
+     * down, rather than by asking for the highest block. The highest block is wrong three ways over:
+     * it counts water, so a border across a lake stood on the surface and disappeared the moment you
+     * swam under it; it counts leaves, so one under a tree hung at canopy height; and it looks from
+     * the sky, so in a cave or a building it reported the hillside or the roof overhead and the pane
+     * was placed in the ceiling. Clamping the result back towards the player then buried the panes it
+     * had put too high, and left the rest hanging at whatever height the player happened to be.</p>
+     *
+     * <p>Water and air are both open here, so the search comes to rest on the lake bed rather than on
+     * the lake, and a border crossing one is drawn where somebody swimming can see it.</p>
+     */
+    private static Integer baseUnder(final World world, final int x, final int z, final int playerY) {
+        final int ceiling = Math.min(world.getMaxHeight() - 1, playerY + OPEN_ABOVE);
+        int open = Integer.MIN_VALUE;
+        for (int y = Math.max(playerY, world.getMinHeight()); y <= ceiling; y++) {
+            if (!world.getBlockAt(x, y, z).getType().isSolid()) {
+                open = y;
+                break;
+            }
+        }
+        if (open == Integer.MIN_VALUE) {
+            return null;
+        }
+        final int lowest = Math.max(world.getMinHeight(), playerY - FLOOR_BELOW);
+        int floor = open;
+        while (floor > lowest && !world.getBlockAt(x, floor - 1, z).getType().isSolid()) {
+            floor--;
+        }
+        return floor - SUNK;
+    }
+
+    private BlockDisplay raise(final Player player, final World world, final Pane pane,
                                final boolean crossable) {
-        final Location standing = pane.standsAt(world, playerY);
+        final Location standing = pane.standsAt(world);
         final BlockDisplay display = world.spawn(standing, BlockDisplay.class, spawned -> {
             // Before it is added to the world, so it is never briefly visible to everybody nearby
             spawned.setVisibleByDefault(false);
@@ -191,6 +244,8 @@ public final class GlassBorderRenderer implements BorderRenderer {
             // Otherwise every pane puts a dark blot on the ground beneath it and a border reads as a
             // stain rather than a wall
             spawned.setShadowRadius(0.0F);
+            spawned.setDisplayWidth(CULLING_WIDTH);
+            spawned.setDisplayHeight(CULLING_HEIGHT);
             spawned.setInterpolationDuration(FADE_TICKS);
             spawned.setTransformation(pane.shape(0.0F));
         });
@@ -255,60 +310,29 @@ public final class GlassBorderRenderer implements BorderRenderer {
     }
 
     /**
-     * One pane, named by the face it stands on.
+     * One pane, named by the face it stands on and the height it stands at.
      *
-     * <p>The step is part of its identity, not decoration: the two sides of one seam are two faces,
-     * and a shard can own the ground on either side of a line somewhere else along it.</p>
+     * <p>The seam is part of its identity, not decoration: the two sides of one line are two faces,
+     * and a shard can own the ground on either side of it somewhere else along that line.</p>
+     *
+     * <p>So is the base. A pane whose floor has changed is a different pane and is raised again,
+     * which is what lets one follow a player down into a cave or up onto a roof. In practice it
+     * hardly ever changes, because the floor is found from the terrain rather than from where the
+     * player happens to be standing.</p>
      *
      * @param insideX the block on our side of the face
      * @param seam the grid line the pane stands on
      * @param alongX whether the seam is crossed in x, so the pane runs in z
+     * @param base the y the pane starts at, already sunk into the floor
      */
-    private record Pane(int insideX, int insideZ, int seam, boolean alongX) {
+    private record Pane(int insideX, int insideZ, int seam, boolean alongX, int base) {
 
-        static Pane of(final EdgeSighting face) {
-            return new Pane(face.insideX(), face.insideZ(), face.seamCoordinate(), face.alongX());
-        }
-
-        /**
-         * Where along its own run this pane sits, for thinning. Taken from the coordinate that varies
-         * along the run, so the panes that survive are the same ones from pass to pass - thinning on
-         * anything that moved with the player would make the gaps crawl.
-         */
-        int along() {
-            return Math.floorMod(this.alongX ? this.insideZ : this.insideX, 2);
-        }
-
-        /**
-         * Whether the run this pane belongs to ends beside it, which is to say whether it is at a
-         * corner.
-         */
-        boolean turnsAt(final Set<Pane> present) {
-            return !present.contains(shifted(-1)) || !present.contains(shifted(1));
-        }
-
-        private Pane shifted(final int by) {
-            return this.alongX
-                ? new Pane(this.insideX, this.insideZ + by, this.seam, true)
-                : new Pane(this.insideX + by, this.insideZ, this.seam, false);
-        }
-
-        /**
-         * Where the pane stands, and how tall the ground lets it be.
-         *
-         * <p>On the surface under its own face when that is near the player, and at the player's own
-         * level when it is not. A border underground would otherwise be drawn on the hillside above
-         * it, and one in the open would be a ribbon hanging at whatever height the player happened to
-         * be when it appeared.</p>
-         */
-        Location standsAt(final World world, final int playerY) {
-            final int surface = world.getHighestBlockYAt(this.insideX, this.insideZ) + 1;
-            final int base = Math.max(playerY - GROUND_SEARCH, Math.min(playerY + GROUND_SEARCH, surface));
+        Location standsAt(final World world) {
             // A block display draws its block from its own position outwards, so the pane is placed at
             // the low corner of the volume it should fill rather than at the middle of it
             return this.alongX
-                ? new Location(world, this.seam - THICKNESS / 2.0F, base, this.insideZ)
-                : new Location(world, this.insideX, base, this.seam - THICKNESS / 2.0F);
+                ? new Location(world, this.seam - THICKNESS / 2.0F, this.base, this.insideZ)
+                : new Location(world, this.insideX, this.base, this.seam - THICKNESS / 2.0F);
         }
 
         Transformation shape(final float height) {
