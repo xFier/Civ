@@ -27,6 +27,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 
 /**
@@ -177,6 +178,25 @@ public final class MirrorPlayerView implements Listener, MirrorPlayers {
                 send(player, new WrapperPlayServerDestroyEntities(ghost.entityId()));
             }
         }
+    }
+
+    /**
+     * Takes somebody's ghost away the instant they arrive here for real.
+     *
+     * <p>Lowest priority, and on join rather than on the next announcement, because the order is the
+     * whole point. A client keys entities by uuid as well as by id, so while the ghost still holds
+     * that uuid the real player is <em>refused</em> - "Duplicate entity UUID" - and destroying the
+     * ghost afterwards then leaves nothing at all. Somebody who crossed a border was invisible until
+     * they crossed back.</p>
+     *
+     * <p>This runs before the entity tracker sends the real spawn, so the uuid is free by the time
+     * the client is told about them. The same clearing in the announcement handler stays as a
+     * backstop; it is simply always too late to be the only one.</p>
+     */
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onJoin(final PlayerJoinEvent event) {
+        this.lastHeardOf.remove(event.getPlayer().getUniqueId());
+        forgetEverywhere(event.getPlayer().getUniqueId());
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
