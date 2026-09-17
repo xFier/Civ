@@ -19,12 +19,16 @@ import org.spongepowered.configurate.yaml.YamlConfigurationLoader;
  *
  * @param shards the areas each shard owns, keyed by the server name the shard runs on
  * @param holdingServer where a player whose shard cannot be determined is sent
+ * @param lockExpirySeconds how long a shard must go without answering before the players it is
+ *     holding are let go. Zero leaves them held until it comes back, which is what happened before
+ *     this key existed
  */
 @ConfigSerializable
 public record ShardsConfig(
     Map<String, List<ShardRegion>> shards,
     String holdingServer,
     String failureMessage,
+    Integer lockExpirySeconds,
     DatabaseConfig database,
     RabbitMqConfig rabbitmq
 ) {
@@ -40,6 +44,9 @@ public record ShardsConfig(
         }
         // Absent keys arrive as null, so fall back to the previous defaults
         holdingServer = holdingServer == null ? "" : holdingServer.trim();
+        // A minute of silence: long enough that a shard pausing under load is not mistaken for a dead
+        // one, short enough that somebody logging in after a crash is not left waiting on an operator
+        lockExpirySeconds = lockExpirySeconds == null ? 60 : lockExpirySeconds;
         failureMessage = failureMessage == null
             ? "Unable to place you on a shard. Please reconnect and try again."
             : failureMessage;

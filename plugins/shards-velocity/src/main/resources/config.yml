@@ -41,4 +41,10 @@ shards:
     - vertices: [{x: 0, z: -10000}, {x: 10000, z: -10000}, {x: 10000, z: 10000}, {x: 0, z: 10000}]
 
 holding-server: "pvp"
+
+# A lock on a player's data is only ever released by the server holding it, so a shard that dies
+# and does not come back keeps its players unclaimable. After this many seconds of a shard not
+# answering - and only while the proxy has nobody connected to it - its locks are dropped and those
+# players keep whatever was last written back. 0 leaves them held until the shard returns.
+lock-expiry-seconds: 60
 failure-message: "Unable to place you on a shard. Please reconnect and try again."
