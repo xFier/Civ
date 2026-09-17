@@ -28,7 +28,6 @@ import net.civmc.shards.paper.mirror.MirrorRepairListener;
 import net.civmc.shards.paper.mirror.MirrorStore;
 import net.civmc.shards.paper.mirror.MirrorUpdatePublisher;
 import net.civmc.shards.paper.mirror.MirrorView;
-import net.civmc.shards.paper.mirror.UnownedBlockListener;
 import net.civmc.shards.paper.mirror.UnownedEntityView;
 import net.civmc.shards.paper.mirror.UnownedGroundListener;
 import net.civmc.shards.paper.playerdata.OwnedPlayers;
@@ -112,7 +111,6 @@ public final class ShardsPaperPlugin extends JavaPlugin {
         getCommand("shardsnapshot").setExecutor(new SnapshotVerifyCommand());
         startSkySync();
         startUnownedEntityView();
-        freezeUnownedGround();
         startMirror(outlook);
         startPeriodicSave();
         startBorderView(this.view);
@@ -208,24 +206,6 @@ public final class ShardsPaperPlugin extends JavaPlugin {
             final List<MirrorStore.Saved> chunks = mirror.toSave();
             getServer().getScheduler().runTaskAsynchronously(this, () -> store.save(chunks));
         }, MIRROR_SAVE_TICKS, MIRROR_SAVE_TICKS);
-    }
-
-    /**
-     * Stops this shard's copy of the ground past its border from changing on its own.
-     *
-     * <p>Not only tidiness. That copy is ticked like any other ground, so it floods, burns and grows -
-     * and what it floods and burns into is ground this shard really does own, caused by a copy of
-     * somebody else's land that no other shard can see. It is also what makes the copy a stable thing
-     * to compare a neighbour's chunk against.</p>
-     */
-    private void freezeUnownedGround() {
-        if (!this.config.freezeUnownedGround()) {
-            getLogger().warning("Not freezing unowned ground: this server's own copy of the ground past "
-                + "its border will keep flowing, burning and growing, and can change ground this shard "
-                + "does own");
-            return;
-        }
-        getServer().getPluginManager().registerEvents(new UnownedBlockListener(this.border), this);
     }
 
     /**

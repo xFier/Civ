@@ -1,21 +1,25 @@
 package net.civmc.shards.paper.border;
 
+import java.util.List;
 import net.civmc.shards.api.TransferStatus;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.block.BlockState;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
+import org.bukkit.event.Cancellable;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.block.BlockBurnEvent;
 import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockBurnEvent;
 import org.bukkit.event.block.BlockDispenseEvent;
 import org.bukkit.event.block.BlockDropItemEvent;
 import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.block.BlockFadeEvent;
 import org.bukkit.event.block.BlockFertilizeEvent;
+import org.bukkit.event.block.BlockFormEvent;
 import org.bukkit.event.block.BlockFromToEvent;
 import org.bukkit.event.block.BlockGrowEvent;
 import org.bukkit.event.block.BlockIgniteEvent;
@@ -29,6 +33,7 @@ import org.bukkit.event.block.LeavesDecayEvent;
 import org.bukkit.event.block.MoistureChangeEvent;
 import org.bukkit.event.block.SignChangeEvent;
 import org.bukkit.event.block.SpongeAbsorbEvent;
+import org.bukkit.event.entity.EntityChangeBlockEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.player.PlayerBucketEmptyEvent;
 import org.bukkit.event.player.PlayerBucketFillEvent;
@@ -36,6 +41,7 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.event.vehicle.VehicleMoveEvent;
+import org.bukkit.event.world.StructureGrowEvent;
 
 /**
  * Stops this shard at its edges, and hands over anyone who walks past one.
@@ -191,6 +197,36 @@ public final class ShardBorderListener implements Listener {
         cancelIfOutside(event.getBlock(), event);
     }
 
+    /**
+     * Ice, snow, concrete and the rest of what forms by itself. Missed when this list was written, and
+     * the one most likely to be noticed: a whole winter's snow and ice across a neighbour's land, laid
+     * down by this server alone.
+     */
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onForm(final BlockFormEvent event) {
+        cancelIfOutside(event.getBlock(), event);
+    }
+
+    /**
+     * A tree. The sapling it grows from is refused by {@link #onGrow}, but a tree on our own ground
+     * reaching over the line is not, so the blocks past it are dropped rather than the tree refused -
+     * the same rule the explosions follow.
+     */
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onStructureGrow(final StructureGrowEvent event) {
+        event.getBlocks().removeIf(this::isOutside);
+    }
+
+    /**
+     * An entity rewriting a block: an enderman taking one, a falling block landing, a sheep eating
+     * grass. Nothing of ours should be out there to do it - that is what the unowned entity view is
+     * for - but this costs one comparison and closes the hole rather than trusting that.
+     */
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onEntityChangeBlock(final EntityChangeBlockEvent event) {
+        cancelIfOutside(event.getBlock(), event);
+    }
+
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onDispense(final BlockDispenseEvent event) {
         cancelIfOutside(event.getBlock(), event);
@@ -244,12 +280,33 @@ public final class ShardBorderListener implements Listener {
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onPistonExtend(final BlockPistonExtendEvent event) {
-        cancelIfAnyOutside(event.getBlocks(), event);
+        cancelIfPistonReachesOut(event, event.getBlock(), event.getBlocks(), event.getDirection());
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onPistonRetract(final BlockPistonRetractEvent event) {
-        cancelIfAnyOutside(event.getBlocks(), event);
+        cancelIfPistonReachesOut(event, event.getBlock(), event.getBlocks(), event.getDirection());
+    }
+
+    /**
+     * Where each block ends up, as well as where it starts, and the piston itself.
+     *
+     * <p>Checking only the blocks being moved misses the case that matters: every one of them is ours,
+     * and they are all being pushed one block over the line onto ground that is not. It also missed a
+     * piston sitting outside entirely, which nothing else here would have caught.</p>
+     */
+    private void cancelIfPistonReachesOut(final Cancellable event, final Block piston,
+                                          final List<Block> moving, final BlockFace direction) {
+        if (isOutside(piston)) {
+            event.setCancelled(true);
+            return;
+        }
+        for (final Block block : moving) {
+            if (isOutside(block) || isOutside(block.getRelative(direction))) {
+                event.setCancelled(true);
+                return;
+            }
+        }
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
@@ -267,15 +324,6 @@ public final class ShardBorderListener implements Listener {
     private void cancelIfOutside(final Block block, final org.bukkit.event.Cancellable event) {
         if (isOutside(block)) {
             event.setCancelled(true);
-        }
-    }
-
-    private void cancelIfAnyOutside(final Iterable<Block> blocks, final org.bukkit.event.Cancellable event) {
-        for (final Block block : blocks) {
-            if (isOutside(block)) {
-                event.setCancelled(true);
-                return;
-            }
         }
     }
 

@@ -21,9 +21,6 @@ import org.bukkit.configuration.file.FileConfiguration;
  * @param hideUnownedEntities whether this server stops spawning and stops showing entities on
  *     ground it does not own, which it otherwise populates with a wrong copy the owning shard cannot
  *     see
- * @param freezeUnownedGround whether this server stops its own copy of the ground past its border
- *     from changing. Otherwise that copy keeps ticking - fluids flow, fire spreads, things grow - and
- *     can act on ground the shard really does own, from a copy nobody else can see
  * @param mirrorChunks whether this server shows what the neighbouring shard really has on the
  *     ground past the border, instead of its own untouched copy of it
  * @param saveMirror whether what the neighbours have said is kept across a restart. Without it a
@@ -33,8 +30,8 @@ import org.bukkit.configuration.file.FileConfiguration;
  */
 public record ShardsPaperConfig(String serverName, String failureMessage, int saveIntervalSeconds,
                                 String arrivalTitle, String arrivalSubtitle, int skySyncSeconds,
-                                boolean hideUnownedEntities, boolean freezeUnownedGround,
-                                boolean mirrorChunks, boolean saveMirror, BorderStyle borderStyle,
+                                boolean hideUnownedEntities, boolean mirrorChunks, boolean saveMirror,
+                                BorderStyle borderStyle,
                                 String user, String password, String host, int port) {
 
     /**
@@ -88,7 +85,6 @@ public record ShardsPaperConfig(String serverName, String failureMessage, int sa
             arrival == null ? "" : arrival.getString("subtitle", ""),
             configuration.getInt("sky-sync-seconds", 5),
             configuration.getBoolean("hide-unowned-entities", true),
-            configuration.getBoolean("freeze-unowned-ground", true),
             configuration.getBoolean("mirror-chunks", true),
             configuration.getBoolean("save-mirror", true),
             borderStyle(configuration.getString("border-style", "particles")),

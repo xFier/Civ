@@ -30,8 +30,9 @@ import java.util.zip.GZIPOutputStream;
  * <p>What is saved is the <em>difference</em> from this server's own copy, not the neighbour's chunk.
  * It is a fraction of the size - tens of blocks against sixteen thousand - and it is the thing that
  * gets drawn, so a saved chunk goes on screen without reading anything or comparing anything. The
- * price is that it only means anything against this server's own copy of that ground, which is
- * precisely what {@link UnownedBlockListener} freezes: with that off, this rots.</p>
+ * price is that it only means anything against this server's own copy of that ground - so it holds
+ * only for as long as that copy does not move, which is what {@code ShardBorderListener} guarantees by
+ * refusing every block change past the border.</p>
  *
  * <p><strong>Still not a catch-up log.</strong> Nothing here is replayed and nothing is trusted. What
  * is loaded is a <em>starting picture</em>, shown at once and marked to be read again the moment

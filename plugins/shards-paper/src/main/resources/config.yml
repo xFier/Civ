@@ -52,28 +52,6 @@ sky-sync-seconds: 5
 # its rate. Set to false to go back to the old behaviour while judging that.
 hide-unowned-entities: true
 
-# Whether this server stops its own copy of the ground past its border from changing.
-#
-# A shard loads and ticks the chunks past its edge, so its copy of a neighbour's land does not simply
-# sit there going out of date - it keeps moving. Leaves decay, fluids flow, crops grow, ice forms and
-# melts, fire spreads. None of it is real: the shard that owns that ground has its own, different
-# contents there and cannot see any of this.
-#
-# The reason this matters is not the copy but what the copy does to us. Water in this server's copy of
-# a neighbour's valley runs downhill into ground this shard really does own, and floods it; a fire out
-# there spreads onto blocks that are real, reinforceable and somebody's. That is caused entirely by a
-# copy of land nobody else can see.
-#
-# It also makes the copy a stable thing to compare against, which is what the mirror does with it.
-#
-# Nothing is removed and nothing is corrected - the copy is left as it is, simply no longer moving.
-# What players see out there is the neighbour's real ground, drawn over the top. Refused per block
-# where an event covers several, so an explosion or a tree on this shard's own ground that reaches
-# over the border keeps everything it is entitled to and loses only what is past the line.
-#
-# Redstone is left running; pistons, the part of it that rewrites blocks, are refused.
-freeze-unowned-ground: true
-
 # Whether this server shows what the neighbouring shard really has on the ground past the border.
 #
 # Every shard's world starts as a copy of the same map, so unmodified ground matches exactly - which
@@ -104,8 +82,8 @@ mirror-chunks: true
 # looks at it, so it is a head start and not a catch-up log - it is only ever as out of date as the
 # first second somebody stands there, and only stays so while its owner cannot be reached at all.
 #
-# This relies on freeze-unowned-ground: a saved difference only means anything against a copy that has
-# not moved underneath it.
+# A saved difference only means anything against a copy of that ground which has not moved underneath
+# it, which holds because every block change past the border is already refused.
 save-mirror: true
 
 # What the border between shards is drawn with, where a player can see one.
