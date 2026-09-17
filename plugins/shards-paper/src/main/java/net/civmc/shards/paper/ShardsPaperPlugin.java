@@ -60,7 +60,7 @@ public final class ShardsPaperPlugin extends JavaPlugin {
 
         final BorderNotices notices = new BorderNotices();
         final BorderOutlook outlook = new BorderOutlook(this.client, this.config.serverName(), getLogger());
-        final BorderView view = new BorderView(this.border, outlook);
+        final BorderView view = new BorderView(this.border, outlook, notices);
         this.transfers = new TransferService(this, this.client, this.owned, getLogger(),
             this.config.serverName(), this.config.failureMessage(), notices, view);
 

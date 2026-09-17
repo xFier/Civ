@@ -1,10 +1,10 @@
 package net.civmc.shards.api;
 
 /**
- * What lies on the other side of a border.
+ * What lies on the other side of one border face.
  *
  * <p>A shard learns only its own areas, so it knows where it ends but not what it ends against. These
- * are the three answers that matter to someone standing at the edge, because they are the difference
+ * are the answers that matter to somebody standing at the edge, because they are the difference
  * between a door, a wall, and a door that is shut today.</p>
  */
 public enum BorderProbeStatus {
@@ -16,8 +16,5 @@ public enum BorderProbeStatus {
     UNOWNED,
 
     /** A shard owns it but is not answering, so crossing would be refused until it comes back. */
-    UNREACHABLE,
-
-    /** The probe itself failed. Says nothing about the ground either way. */
-    ERROR
+    UNREACHABLE
 }

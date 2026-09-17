@@ -1,5 +1,6 @@
 package net.civmc.shards.paper.border;
 
+import net.civmc.shards.api.TransferStatus;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
@@ -47,10 +48,6 @@ import org.bukkit.event.vehicle.VehicleMoveEvent;
  */
 public final class ShardBorderListener implements Listener {
 
-    // Far enough to be a warning rather than a surprise, near enough that it is not shown to someone
-    // merely walking about within their own shard
-    private static final int APPROACH_RADIUS = 8;
-
     private final ShardBorder border;
     private final TransferService transfers;
     private final BorderNotices notices;
@@ -74,7 +71,10 @@ public final class ShardBorderListener implements Listener {
             return;
         }
         if (!this.border.isOutside(to)) {
-            warnIfNearEdge(event.getPlayer(), to);
+            return;
+        }
+        if (refuseWithoutAsking(event.getPlayer(), to)) {
+            event.setCancelled(true);
             return;
         }
         // Handed over first, cancelled second. Cancelling a move puts the player back where they
@@ -87,16 +87,27 @@ public final class ShardBorderListener implements Listener {
     }
 
     /**
-     * Says so while a player walks towards a border, so the edge is not a surprise.
+     * Turns back a step into ground no shard owns, without asking the proxy.
      *
-     * <p>Only on a block change, which the caller has already filtered to - the search is four short
-     * walks outward, and running it every fraction of a block would be paying for it sixty times a
-     * second for no more information.</p>
+     * <p>Only for ground owned by nobody, which is the one answer that cannot change while the server
+     * is up: it comes from the shard map, and the shard map arrives once at startup. Anything else -
+     * including a neighbour that is merely down - still goes to the proxy, because it is the proxy
+     * that decides, and a shard coming back while somebody stands at its border is exactly the case
+     * this must not get wrong.</p>
+     *
+     * <p>Worth the special case because the alternative is a broker round trip for every step taken
+     * into a wall, and a player walking along one takes a great many. It also means the answer is
+     * instant rather than arriving a moment after they have been pushed back.</p>
      */
-    private void warnIfNearEdge(final Player player, final Location at) {
-        this.border.nearestEdge((int) Math.floor(at.getX()), (int) Math.floor(at.getZ()), APPROACH_RADIUS)
-            .ifPresent(edge -> this.notices.approaching(player,
-                BorderNotices.approachMessage(this.outlook.beyond(at, edge).orElse(null))));
+    private boolean refuseWithoutAsking(final Player player, final Location to) {
+        final boolean nowhereToGo = this.outlook.beyond(to.getBlockX(), to.getBlockZ())
+            .map(BorderOutlook.Beyond::permanentlyClosed)
+            .orElse(false);
+        if (!nowhereToGo) {
+            return false;
+        }
+        this.notices.refused(player, TransferStatus.NO_DESTINATION);
+        return true;
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)

@@ -2,6 +2,8 @@ package net.civmc.shards.velocity.rabbitmq;
 
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -11,8 +13,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import net.civmc.shards.api.BorderProbeRequest;
 import net.civmc.shards.api.BorderProbeResponse;
+import net.civmc.shards.api.BorderProbeResult;
 import net.civmc.shards.api.BorderProbeStatus;
 import net.civmc.shards.api.ShardsRabbitMqTopology;
+import net.civmc.shards.api.region.ShardPoint;
 import net.civmc.shards.velocity.placement.ShardPlacementService;
 import org.slf4j.Logger;
 
@@ -72,23 +76,38 @@ public final class BorderProbeHandler implements RequestHandler<BorderProbeReque
 
     @Override
     public BorderProbeResponse handle(final BorderProbeRequest request) {
-        final Optional<String> owner = this.placementService.shardFor(request.location());
+        final List<BorderProbeResult> results = new ArrayList<>(request.blocks().size());
+        for (final ShardPoint block : request.blocks()) {
+            results.add(resolve(request.serverName(), block));
+        }
+        return BorderProbeResponse.of(request.requestId(), results);
+    }
+
+    private BorderProbeResult resolve(final String askingServer, final ShardPoint block) {
+        final Optional<String> owner = this.placementService.shardForBlock(block.x(), block.z());
         if (owner.isEmpty()) {
             // Shards are allowed not to touch, so ground owned by nobody is the configuration working
             // rather than a fault. It is a wall, and a permanent one
-            return BorderProbeResponse.of(request.requestId(), BorderProbeStatus.UNOWNED, null);
+            return new BorderProbeResult(block.x(), block.z(), BorderProbeStatus.UNOWNED, null);
         }
         final Optional<RegisteredServer> target = this.proxyServer.getServer(owner.get());
         if (target.isEmpty()) {
             this.logger.warn("Shard {} owns ground next to {} but is not registered with the proxy",
-                owner.get(), request.serverName());
-            return BorderProbeResponse.of(request.requestId(), BorderProbeStatus.UNREACHABLE, owner.get());
+                owner.get(), askingServer);
+            return new BorderProbeResult(block.x(), block.z(), BorderProbeStatus.UNREACHABLE, owner.get());
         }
-        return BorderProbeResponse.of(request.requestId(),
-            isReachable(target.get(), owner.get()) ? BorderProbeStatus.CROSSABLE : BorderProbeStatus.UNREACHABLE,
-            owner.get());
+        final BorderProbeStatus status = isReachable(target.get(), owner.get())
+            ? BorderProbeStatus.CROSSABLE
+            : BorderProbeStatus.UNREACHABLE;
+        return new BorderProbeResult(block.x(), block.z(), status, owner.get());
     }
 
+    /**
+     * Whether that shard is answering.
+     *
+     * <p>Cached per shard rather than per block, so a probe covering a whole stretch of border is at
+     * most one ping per neighbour rather than one per face.</p>
+     */
     private boolean isReachable(final RegisteredServer target, final String shardName) {
         final Reachability cached = this.recentlyChecked.get(shardName);
         if (cached != null && System.nanoTime() - cached.checkedAtNanos() < REACHABILITY_CACHE_NANOS) {

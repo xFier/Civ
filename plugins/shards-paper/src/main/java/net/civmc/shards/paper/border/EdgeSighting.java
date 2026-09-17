@@ -40,4 +40,25 @@ public record EdgeSighting(int distance, int outsideX, int outsideZ, int stepX, 
     public boolean alongX() {
         return this.stepX != 0;
     }
+
+    /**
+     * The block on this side of the face, which is the last one a player can stand on before it.
+     */
+    public int insideX() {
+        return this.outsideX - this.stepX;
+    }
+
+    public int insideZ() {
+        return this.outsideZ - this.stepZ;
+    }
+
+    /**
+     * Whether a player standing on {@code (blockX, blockZ)} is pressed right up against this face.
+     *
+     * <p>The difference between telling somebody the world ends ahead and telling them it ends here,
+     * which is the difference between a warning and an answer to what they just walked into.</p>
+     */
+    public boolean adjacentTo(final int blockX, final int blockZ) {
+        return insideX() == blockX && insideZ() == blockZ;
+    }
 }
