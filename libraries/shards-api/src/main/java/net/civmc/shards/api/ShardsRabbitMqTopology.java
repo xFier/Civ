@@ -77,6 +77,18 @@ public final class ShardsRabbitMqTopology {
     // and applying a minute-old change on top of a fresh read would put back what was taken away
     public static final int MIRROR_UPDATE_TTL_MILLIS = 15_000;
 
+    /**
+     * Where a shard announces where its players are standing.
+     *
+     * <p>Its own exchange rather than sharing the block one, so a receiver knows what a message is
+     * before reading it - and so the two can be told apart in the broker's own statistics, which is
+     * the only place their very different rates will ever be visible.</p>
+     */
+    public static final String MIRROR_PLAYER_EXCHANGE = "shards.mirror.players";
+    // Two ticks. A position is only ever the latest one, so a late message is not missed, it is
+    // replaced - and applying one that is a second old would drag somebody backwards
+    public static final int MIRROR_PLAYER_TTL_MILLIS = 100;
+
     public static final String REPLY_QUEUE_PREFIX = "shards.replies.";
 
     /**

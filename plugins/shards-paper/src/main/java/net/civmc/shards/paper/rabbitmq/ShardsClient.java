@@ -25,6 +25,7 @@ import java.util.logging.Logger;
 import net.civmc.shards.api.BorderProbeRequest;
 import net.civmc.shards.api.ChunkStateRequest;
 import net.civmc.shards.api.ChunkUpdateMessage;
+import net.civmc.shards.api.PlayerPositionMessage;
 import net.civmc.shards.api.ChunkStateResponse;
 import net.civmc.shards.api.NightSkipRequest;
 import net.civmc.shards.api.NightSkipResponse;
@@ -248,25 +249,43 @@ public final class ShardsClient implements AutoCloseable {
      * applying a stale change on top would put back what was taken away.</p>
      */
     public void publishMirrorUpdate(final ChunkUpdateMessage update) {
+        announce(ShardsRabbitMqTopology.MIRROR_UPDATE_EXCHANGE, update,
+            ShardsRabbitMqTopology.MIRROR_UPDATE_TTL_MILLIS);
+    }
+
+    /**
+     * Sends something to everybody and does not wait to hear about it.
+     *
+     * <p>Nothing here can fail in a way worth reporting. The worst case for a lost announcement is a
+     * neighbour showing a stale block until it next reads the chunk, or a player standing still for a
+     * tick - both of which are what happened before any of this existed.</p>
+     */
+    private void announce(final String exchange, final Object body, final int expiryMillis) {
         if (!this.ready || this.channel == null || !this.channel.isOpen()) {
             return;
         }
         try {
             final AMQP.BasicProperties properties = new AMQP.BasicProperties.Builder()
                 .contentType(ShardsRabbitMqTopology.CONTENT_TYPE_JSON)
-                .expiration(String.valueOf(ShardsRabbitMqTopology.MIRROR_UPDATE_TTL_MILLIS))
+                .expiration(String.valueOf(expiryMillis))
                 .deliveryMode(1)
                 .build();
             synchronized (this) {
-                this.channel.exchangeDeclare(ShardsRabbitMqTopology.MIRROR_UPDATE_EXCHANGE, "fanout", false);
-                this.channel.basicPublish(ShardsRabbitMqTopology.MIRROR_UPDATE_EXCHANGE, "", properties,
-                    GSON.toJson(update).getBytes(StandardCharsets.UTF_8));
+                this.channel.exchangeDeclare(exchange, "fanout", false);
+                this.channel.basicPublish(exchange, "", properties,
+                    GSON.toJson(body).getBytes(StandardCharsets.UTF_8));
             }
         } catch (final IOException exception) {
-            // Nothing to fail: the worst case is that a neighbour shows this block until it next reads
-            // the chunk, which is the behaviour before any of this existed
-            this.logger.log(Level.FINE, "Could not announce a mirror update", exception);
+            this.logger.log(Level.FINE, "Could not announce on " + exchange, exception);
         }
+    }
+
+    /**
+     * Announces where this shard's players are, to every shard at once.
+     */
+    public void publishPlayerPositions(final PlayerPositionMessage positions) {
+        announce(ShardsRabbitMqTopology.MIRROR_PLAYER_EXCHANGE, positions,
+            ShardsRabbitMqTopology.MIRROR_PLAYER_TTL_MILLIS);
     }
 
     private <RES> CompletableFuture<RES> publish(final String queue, final UUID requestId, final Object body,

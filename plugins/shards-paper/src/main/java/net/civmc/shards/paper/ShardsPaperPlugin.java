@@ -19,6 +19,8 @@ import net.civmc.shards.paper.border.TransferService;
 import net.civmc.shards.paper.config.ShardsPaperConfig;
 import net.civmc.shards.paper.mirror.ChunkStateProvider;
 import net.civmc.shards.paper.mirror.MirrorMetrics;
+import net.civmc.shards.paper.mirror.MirrorPlayerPublisher;
+import net.civmc.shards.paper.mirror.MirrorPlayerView;
 import net.civmc.shards.paper.mirror.MirrorRepairListener;
 import net.civmc.shards.paper.mirror.MirrorUpdatePublisher;
 import net.civmc.shards.paper.mirror.MirrorView;
@@ -181,14 +183,16 @@ public final class ShardsPaperPlugin extends JavaPlugin {
             return;
         }
         final MirrorMetrics metrics = new MirrorMetrics();
+        final MirrorPlayerView players = new MirrorPlayerView();
         // As far as the client renders, which is what has to look right. The neighbour's own view
         // distance does not come into it - it is this server's players who are looking
         final MirrorView mirror = new MirrorView(this, this.border, outlook, this.client,
             this.config.serverName(), getLogger(), getServer().getViewDistance(), metrics);
         this.mirrorServer = new ShardsServer(this.config.connectionFactory(), this.config.serverName(), this,
             getLogger(), new ChunkStateProvider(this.border), metrics,
-            // Announcements arrive on a broker thread and this reads the world and sends to players
-            update -> getServer().getScheduler().runTask(this, () -> mirror.applyUpdate(update)));
+            // Announcements arrive on a broker thread and these read the world and send to players
+            update -> getServer().getScheduler().runTask(this, () -> mirror.applyUpdate(update)),
+            positions -> getServer().getScheduler().runTask(this, () -> players.apply(positions)));
         this.mirrorServer.start();
         getServer().getPluginManager().registerEvents(mirror, this);
         // A refused placement makes the client correct itself to what is really there, which for
@@ -201,6 +205,14 @@ public final class ShardsPaperPlugin extends JavaPlugin {
             this.config.serverName(), getLogger());
         getServer().getPluginManager().registerEvents(publisher, this);
         getServer().getScheduler().runTaskTimer(this, publisher::flush, 1L, 1L);
+
+        // Where this shard's players are, every tick, for the shards that can see that ground. This is
+        // the half that makes a border read as one world rather than two servers
+        final MirrorPlayerPublisher playerPublisher = new MirrorPlayerPublisher(this.border, this.client,
+            this.config.serverName());
+        getServer().getPluginManager().registerEvents(players, this);
+        getServer().getScheduler().runTaskTimer(this, playerPublisher::publish, 1L, 1L);
+        getServer().getScheduler().runTaskTimer(this, players::expire, 20L, 20L);
         getServer().getScheduler().runTaskTimer(this, () -> {
             for (final Player player : Bukkit.getOnlinePlayers()) {
                 mirror.update(player);
