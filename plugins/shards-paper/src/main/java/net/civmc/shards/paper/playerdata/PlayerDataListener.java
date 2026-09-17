@@ -12,6 +12,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.function.BooleanSupplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import net.civmc.shards.api.ClaimStatus;
 import net.civmc.shards.api.PlayerClaimRequest;
 import net.civmc.shards.api.PlayerClaimResponse;
 import net.civmc.shards.api.PlayerLocation;
@@ -46,6 +47,13 @@ import org.bukkit.scheduler.BukkitTask;
 public final class PlayerDataListener implements Listener {
 
     private static final long CLAIM_TIMEOUT_SECONDS = 10L;
+    // How long a claim refused because somebody else still holds the player is worth waiting out. A
+    // normal handover releases in milliseconds, so this is not about the common case: it is about a
+    // release that is merely slow, and about not turning that into a kick
+    private static final long CONTENDED_CLAIM_BUDGET_MILLIS = 5_000L;
+    // Long enough that a contended login is not a broker round trip every few milliseconds, short
+    // enough that the wait is not noticeably longer than the release it is waiting for
+    private static final long CONTENDED_CLAIM_INTERVAL_MILLIS = 250L;
     // A login can be allowed and then never complete - the client gives up, the connection drops. The
     // lock would otherwise be held by a server with nobody on it until that server next restarts
     private static final long JOIN_TIMEOUT_TICKS = 20L * 15L;
@@ -53,6 +61,11 @@ public final class PlayerDataListener implements Listener {
     // simply is not ready for anyone yet, and it says so rather than implying their data is at risk
     private static final Component NOT_READY_MESSAGE =
         Component.text("This shard is still starting up. Please reconnect in a moment.");
+    // Nothing is wrong with their data either: it is intact and owned by a server that has not let
+    // go of it. Saying so, and that reconnecting is the answer, beats the general failure message,
+    // which reads as though something has been lost
+    private static final Component STILL_HELD_MESSAGE =
+        Component.text("Another server is still holding your data. Please reconnect in a moment.");
 
     private final JavaPlugin plugin;
     private final ShardsClient client;
@@ -104,8 +117,7 @@ public final class PlayerDataListener implements Listener {
         final long askedAt = System.nanoTime();
         final PlayerClaimResponse response;
         try {
-            response = this.client.claim(PlayerClaimRequest.create(this.serverName, playerUuid))
-                .get(CLAIM_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            response = claimWaitingOutContention(playerUuid);
         } catch (final InterruptedException exception) {
             Thread.currentThread().interrupt();
             refuse(event, "interrupted while claiming player data", null);
@@ -140,7 +152,9 @@ public final class PlayerDataListener implements Listener {
             // everyone at once the first time the table is empty
             case NEW_PLAYER -> take(playerUuid);
             case HELD_BY_OTHER -> refuse(event,
-                "data still held by " + response.heldBy() + "; the previous server has not released it", null);
+                "data still held by " + response.heldBy() + " after waiting "
+                    + CONTENDED_CLAIM_BUDGET_MILLIS + "ms; the previous server has not released it",
+                null, STILL_HELD_MESSAGE);
             case ERROR -> refuse(event, "the proxy refused the claim: " + response.failureMessage(), null);
             default -> refuse(event, "unknown claim status " + response.status(), null);
         }
@@ -240,6 +254,42 @@ public final class PlayerDataListener implements Listener {
             (spawnLocation - preLogin) / 1_000_000L,
             (now - spawnLocation) / 1_000_000L,
             (now - preLogin) / 1_000_000L));
+    }
+
+    /**
+     * Claims a player, giving a server that has not let go of them yet a little while to do so.
+     *
+     * <p>A crossing releases before the destination is connected, so a contended claim should not
+     * happen at all - but a release that is merely slow, or a source that died holding the player,
+     * used to come out as being kicked while walking over a border. Waiting is the whole fix for the
+     * first of those and costs nothing for the second beyond a pause before the same refusal.</p>
+     *
+     * <p>Safe to block here: this runs on the login thread, which exists to be waited on, and no
+     * player object exists yet. Bounded rather than open-ended because a server that crashed is never
+     * going to release, and a login that hangs forever is worse than one that is refused with a
+     * reason. What clears that case is 5h, not this.</p>
+     *
+     * <p>Retried from this side rather than inside the proxy's handler: the proxy answers claims on a
+     * small pool of broker consumers shared by the whole network, so a handler that slept would let a
+     * few contended logins hold up everybody else's.</p>
+     */
+    private PlayerClaimResponse claimWaitingOutContention(final UUID playerUuid)
+        throws InterruptedException, ExecutionException, TimeoutException {
+        final long giveUpAt = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(CONTENDED_CLAIM_BUDGET_MILLIS);
+        int attempts = 0;
+        while (true) {
+            attempts++;
+            final PlayerClaimResponse response = this.client.claim(
+                PlayerClaimRequest.create(this.serverName, playerUuid)).get(CLAIM_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            if (response.status() != ClaimStatus.HELD_BY_OTHER || System.nanoTime() - giveUpAt >= 0L) {
+                if (attempts > 1) {
+                    this.logger.info("Claim of " + playerUuid + " took " + attempts + " attempts: "
+                        + response.status());
+                }
+                return response;
+            }
+            Thread.sleep(CONTENDED_CLAIM_INTERVAL_MILLIS);
+        }
     }
 
     private static long elapsedMillis(final long fromNanos) {
