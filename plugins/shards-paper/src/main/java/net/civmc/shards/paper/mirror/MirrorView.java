@@ -17,6 +17,8 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import net.civmc.shards.api.ChunkStateRequest;
 import net.civmc.shards.api.ChunkStateResponse;
+import net.civmc.shards.api.ChunkUpdateMessage;
+import net.civmc.shards.api.mirror.BlockUpdate;
 import net.civmc.shards.api.mirror.ChunkSectionState;
 import net.civmc.shards.api.mirror.ChunkState;
 import net.civmc.shards.api.mirror.ChunkStateCodec;
@@ -58,10 +60,11 @@ import org.bukkit.plugin.java.JavaPlugin;
  */
 public final class MirrorView implements Listener {
 
-    // How long a fetched chunk is trusted before being asked for again. Crude, and the reason live
-    // updates are the next slice: until they land this is the only thing that notices a neighbour
-    // building something
-    private static final long FRESH_FOR_NANOS = TimeUnit.SECONDS.toNanos(60L);
+    // A backstop, not the way changes are noticed - that is what the announcements are for. It used
+    // to be sixty seconds and it was the whole cost of the mirror: seventy chunks re-read every thirty
+    // seconds for a player standing still, to find nothing. Long now, because the only thing it has to
+    // catch is an announcement that never arrived
+    private static final long FRESH_FOR_NANOS = TimeUnit.MINUTES.toNanos(10L);
 
     private final JavaPlugin plugin;
     private final ShardBorder border;
@@ -305,6 +308,55 @@ public final class MirrorView implements Listener {
         final Set<ChunkKey> alreadyShown = this.shown.get(viewer.getUniqueId());
         if (alreadyShown != null) {
             alreadyShown.retainAll(inRange);
+        }
+    }
+
+    /**
+     * Applies what a neighbour says has just changed, to everybody who is looking at that chunk.
+     *
+     * <p>This is what the mirror is for: a block placed on the far side appears here at once, instead
+     * of whenever the chunk next happened to be read. Ignored for a chunk nobody here has fetched -
+     * the announcement goes to every shard, and most of them are not looking.</p>
+     *
+     * <p>The cached picture is corrected rather than thrown away. A block the neighbour now has that
+     * matches our own copy stops being a difference at all and is dropped, which is what keeps the
+     * picture from growing forever as the two worlds converge again.</p>
+     *
+     * <p>Main thread: it reads this server's own blocks and sends to players.</p>
+     */
+    public void applyUpdate(final ChunkUpdateMessage update) {
+        final ChunkKey key = new ChunkKey(update.world(), update.chunkX(), update.chunkZ());
+        final Mirrored current = this.mirrored.get(key);
+        if (current == null) {
+            return;
+        }
+        final World world = Bukkit.getWorld(update.world());
+        if (world == null) {
+            return;
+        }
+        final Map<Position, BlockData> blocks = new HashMap<>(current.blocks());
+        final Map<Position, BlockData> send = new HashMap<>();
+        for (final BlockUpdate block : update.updates()) {
+            final Position position = Position.block(block.x(), block.y(), block.z());
+            final BlockData theirs = Bukkit.createBlockData(block.blockData());
+            final BlockData ours = world.getBlockAt(block.x(), block.y(), block.z()).getBlockData();
+            if (theirs.equals(ours)) {
+                // The two copies agree here again, so there is nothing to draw - but anyone who was
+                // shown the old difference has to be told, which is what our own block does
+                blocks.remove(position);
+                send.put(position, ours);
+            } else {
+                blocks.put(position, theirs);
+                send.put(position, theirs);
+            }
+        }
+        // Keeps the fetch time, because nothing has been re-read - only corrected
+        this.mirrored.put(key, new Mirrored(blocks, blocks, current.fetchedAtNanos()));
+        for (final Player viewer : Bukkit.getOnlinePlayers()) {
+            final Set<ChunkKey> alreadyShown = this.shown.get(viewer.getUniqueId());
+            if (alreadyShown != null && alreadyShown.contains(key)) {
+                viewer.sendMultiBlockChange(send);
+            }
         }
     }
 

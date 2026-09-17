@@ -24,6 +24,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import net.civmc.shards.api.BorderProbeRequest;
 import net.civmc.shards.api.ChunkStateRequest;
+import net.civmc.shards.api.ChunkUpdateMessage;
 import net.civmc.shards.api.ChunkStateResponse;
 import net.civmc.shards.api.NightSkipRequest;
 import net.civmc.shards.api.NightSkipResponse;
@@ -237,6 +238,35 @@ public final class ShardsClient implements AutoCloseable {
     public CompletableFuture<PlayerReleaseResponse> release(final PlayerReleaseRequest request) {
         return publish(ShardsRabbitMqTopology.PLAYER_RELEASE_QUEUE, request.requestId(), request,
             PlayerReleaseResponse.class);
+    }
+
+    /**
+     * Announces blocks that have just changed, to every shard at once.
+     *
+     * <p>Fire and forget, and not durable: an announcement nobody is listening for is of no use, and
+     * one that arrives late is worse than none - the receiver will have re-read the chunk by then, and
+     * applying a stale change on top would put back what was taken away.</p>
+     */
+    public void publishMirrorUpdate(final ChunkUpdateMessage update) {
+        if (!this.ready || this.channel == null || !this.channel.isOpen()) {
+            return;
+        }
+        try {
+            final AMQP.BasicProperties properties = new AMQP.BasicProperties.Builder()
+                .contentType(ShardsRabbitMqTopology.CONTENT_TYPE_JSON)
+                .expiration(String.valueOf(ShardsRabbitMqTopology.MIRROR_UPDATE_TTL_MILLIS))
+                .deliveryMode(1)
+                .build();
+            synchronized (this) {
+                this.channel.exchangeDeclare(ShardsRabbitMqTopology.MIRROR_UPDATE_EXCHANGE, "fanout", false);
+                this.channel.basicPublish(ShardsRabbitMqTopology.MIRROR_UPDATE_EXCHANGE, "", properties,
+                    GSON.toJson(update).getBytes(StandardCharsets.UTF_8));
+            }
+        } catch (final IOException exception) {
+            // Nothing to fail: the worst case is that a neighbour shows this block until it next reads
+            // the chunk, which is the behaviour before any of this existed
+            this.logger.log(Level.FINE, "Could not announce a mirror update", exception);
+        }
     }
 
     private <RES> CompletableFuture<RES> publish(final String queue, final UUID requestId, final Object body,

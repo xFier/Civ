@@ -64,6 +64,19 @@ public final class ShardsRabbitMqTopology {
         return MIRROR_QUEUE_PREFIX + serverName;
     }
 
+    /**
+     * Where a shard announces blocks that have just changed near its border.
+     *
+     * <p>A fanout, so a shard does not have to know which neighbour is looking at which of its
+     * chunks - which would mean tracking that and keeping it up to date as players walk. Every shard
+     * gets every announcement and drops the ones about chunks it has not fetched, which it can answer
+     * from its own cache without asking anybody.</p>
+     */
+    public static final String MIRROR_UPDATE_EXCHANGE = "shards.mirror.updates";
+    // Worthless within seconds: a receiver that has been away is going to re-read the chunk anyway,
+    // and applying a minute-old change on top of a fresh read would put back what was taken away
+    public static final int MIRROR_UPDATE_TTL_MILLIS = 15_000;
+
     public static final String REPLY_QUEUE_PREFIX = "shards.replies.";
 
     /**
