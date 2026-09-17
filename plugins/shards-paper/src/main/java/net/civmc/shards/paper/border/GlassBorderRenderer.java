@@ -75,6 +75,11 @@ public final class GlassBorderRenderer implements BorderRenderer {
     // far below it will follow that space down to a floor
     private static final int OPEN_ABOVE = 4;
     private static final int FLOOR_BELOW = 8;
+    // A pane stands on the floor while the player is within this much of it. Higher than that - up a
+    // pillar, or flying - the floor is not where they are looking, so the pane comes up to meet them,
+    // in steps of FOLLOW_STEP so that climbing does not re-place every pane on every block
+    private static final int FOLLOW_ABOVE = 3;
+    private static final int FOLLOW_STEP = 3;
     // What the client uses to decide the pane is off screen. Left at the entity's own size, a pane
     // scaled well past it is culled while plainly in view
     private static final float CULLING_WIDTH = 2.0F;
@@ -213,6 +218,12 @@ public final class GlassBorderRenderer implements BorderRenderer {
      * <p>Where the column is solid all the way up - a border running into a hillside, or through a
      * wall somebody has built on it - the pane stands at the player's own level instead. It is inside
      * rock there and invisible as glass, which is exactly the case the glow is for.</p>
+     *
+     * <p>And where the floor is a long way down, because the player is up a pillar or flying, the
+     * pane comes up to meet them rather than staying on the ground. A border is a thing you are about
+     * to cross, so it belongs where you are about to cross it; left on the floor it hung several
+     * blocks below anybody in the air, which is both useless and the wrong answer about where the
+     * border is.</p>
      */
     private static int baseUnder(final World world, final int x, final int z, final int playerY) {
         final int ceiling = Math.min(world.getMaxHeight() - 1, playerY + OPEN_ABOVE);
@@ -231,7 +242,24 @@ public final class GlassBorderRenderer implements BorderRenderer {
         while (floor > lowest && !world.getBlockAt(x, floor - 1, z).getType().isSolid()) {
             floor--;
         }
-        return floor - SUNK;
+        return follow(floor - SUNK, playerY);
+    }
+
+    /**
+     * Lifts a pane off the floor once the player is well above it.
+     *
+     * <p>In steps rather than continuously. Following exactly would mean every pane in sight being
+     * taken down and raised again on every block of a climb, and a jump would do it too - the step is
+     * what makes a pane that already covers the player be left alone.</p>
+     */
+    private static int follow(final int floorBase, final int playerY) {
+        final int above = playerY - floorBase;
+        if (above <= FOLLOW_ABOVE) {
+            return floorBase;
+        }
+        // Snapped against the floor rather than against the player, so two players at slightly
+        // different heights over the same ground are shown the pane in the same place
+        return floorBase + Math.floorDiv(above, FOLLOW_STEP) * FOLLOW_STEP;
     }
 
     private BlockDisplay raise(final Player player, final World world, final Pane pane,
