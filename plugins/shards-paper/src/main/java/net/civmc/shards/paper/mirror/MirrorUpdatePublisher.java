@@ -117,7 +117,7 @@ public final class MirrorUpdatePublisher implements Listener {
             final long revision = partial
                 ? this.revisions.nextWithGap(chunk.getKey())
                 : this.revisions.next(chunk.getKey());
-            this.client.publishMirrorUpdate(ChunkUpdateMessage.create(this.serverName, chunk.getKey().world(),
+            this.client.publishMirrorUpdate(ChunkUpdateMessage.blocks(this.serverName, chunk.getKey().world(),
                 chunk.getKey().x(), chunk.getKey().z(), chunk.getValue(), this.revisions.publisherId(),
                 revision));
         }
