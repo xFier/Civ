@@ -54,10 +54,10 @@ public final class BorderProbeHandler implements RequestHandler<BorderProbeReque
     }
 
     @Override
-    public boolean durable() {
-        // A probe is about where somebody is standing right now. One that survived a broker restart
-        // would be answered long after it stopped being a question anyone had
-        return ShardsRabbitMqTopology.BORDER_PROBE_QUEUE_DURABLE;
+    public Map<String, Object> arguments() {
+        // A probe is about where somebody is standing right now, so one left in the queue is dropped
+        // rather than answered long after it stopped being a question anyone had
+        return Map.of("x-message-ttl", ShardsRabbitMqTopology.BORDER_PROBE_TTL_MILLIS);
     }
 
     @Override

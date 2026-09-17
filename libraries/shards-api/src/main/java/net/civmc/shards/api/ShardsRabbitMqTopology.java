@@ -20,12 +20,24 @@ public final class ShardsRabbitMqTopology {
     public static final String PLAYER_RELEASE_QUEUE = "shards.playerdata.release";
     public static final String PLAYER_TRANSFER_QUEUE = "shards.playerdata.transfer";
     public static final String PLAYER_CHECKPOINT_QUEUE = "shards.playerdata.checkpoint";
-    public static final boolean PLAYER_QUEUE_DURABLE = true;
 
-    // Not durable: a probe is about where a player is standing right now, so one that outlived a
-    // broker restart would be answered long after it stopped being a question anybody had
     public static final String BORDER_PROBE_QUEUE = "shards.border.probe";
-    public static final boolean BORDER_PROBE_QUEUE_DURABLE = false;
+    // A probe is about where a player is standing right now, so one still sitting in the queue
+    // seconds later is answering a question nobody has any more. The sender has already given up on
+    // it, and its reply would be dropped as unmatched, so it is dropped here instead
+    public static final int BORDER_PROBE_TTL_MILLIS = 10_000;
+
+    /**
+     * Every request queue survives a broker restart, including the probe queue, whose messages are
+     * worthless within seconds.
+     *
+     * <p>Not a judgement about the messages - it is that the alternative does not exist. A transient
+     * queue that is not exclusive is a feature RabbitMQ now refuses, and refuses at the connection
+     * level: declaring one does not fail that queue, it tears down the whole connection. Asking for
+     * one cost this plugin its entire request consumer at startup and was recovered from silently
+     * enough that only the probes stayed missing. Short-lived messages say so with a TTL instead.</p>
+     */
+    public static final boolean REQUEST_QUEUE_DURABLE = true;
 
     public static final String REPLY_QUEUE_PREFIX = "shards.replies.";
 

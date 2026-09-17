@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonParseException;
 import com.rabbitmq.client.AMQP;
+import com.rabbitmq.client.AlreadyClosedException;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
@@ -77,7 +78,16 @@ public final class ShardsRequestConsumer implements AutoCloseable {
                 .schedule();
             return false;
         } catch (final IOException | TimeoutException exception) {
-            this.logger.error("Failed to connect the Shards request consumer", exception);
+            // Torn down and tried again, rather than left as it fell. A declare that fails partway
+            // through leaves the queues before it consuming on a connection the driver will quietly
+            // recover, so the proxy goes on answering most requests while the rest are unroutable and
+            // time out - which is a far harder fault to see than not starting at all
+            this.logger.error("Failed to connect the Shards request consumer. Trying again in {}s",
+                RECONNECT_DELAY_SECONDS, exception);
+            close();
+            this.proxyServer.getScheduler().buildTask(this.plugin, this::connect)
+                .delay(RECONNECT_DELAY_SECONDS, TimeUnit.SECONDS)
+                .schedule();
             return false;
         }
     }
@@ -107,7 +117,8 @@ public final class ShardsRequestConsumer implements AutoCloseable {
         channel.addReturnListener(returned -> this.logger.error(
             "A reply to {} could not be delivered: {}. The sender will time out",
             returned.getRoutingKey(), returned.getReplyText()));
-        channel.queueDeclare(handler.queue(), handler.durable(), false, false, null);
+        channel.queueDeclare(handler.queue(), ShardsRabbitMqTopology.REQUEST_QUEUE_DURABLE, false, false,
+            handler.arguments());
         final DeliverCallback deliverCallback = (consumerTag, delivery) -> handleDelivery(
             handler, channel, delivery.getBody(), delivery.getProperties(), delivery.getEnvelope().getDeliveryTag());
         channel.basicConsume(handler.queue(), false, deliverCallback, consumerTag -> {
@@ -181,21 +192,25 @@ public final class ShardsRequestConsumer implements AutoCloseable {
         }
     }
 
+    /**
+     * Closes whatever is open. Also called on a failed connect, so it has to cope with a connection
+     * the broker has already torn down - closing one of those throws rather than doing nothing.
+     */
     @Override
-    public void close() {
+    public synchronized void close() {
         for (final Channel channel : this.channels) {
             try {
                 channel.close();
-            } catch (final IOException | TimeoutException exception) {
-                this.logger.warn("Failed to close a Shards channel", exception);
+            } catch (final IOException | TimeoutException | AlreadyClosedException exception) {
+                this.logger.debug("Failed to close a Shards channel", exception);
             }
         }
         this.channels.clear();
         if (this.connection != null) {
             try {
                 this.connection.close();
-            } catch (final IOException exception) {
-                this.logger.warn("Failed to close the Shards connection", exception);
+            } catch (final IOException | AlreadyClosedException exception) {
+                this.logger.debug("Failed to close the Shards connection", exception);
             } finally {
                 this.connection = null;
             }
