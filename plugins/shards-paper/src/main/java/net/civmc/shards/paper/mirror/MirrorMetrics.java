@@ -21,9 +21,12 @@ import java.util.logging.Logger;
 public final class MirrorMetrics {
 
     private final AtomicLong served = new AtomicLong();
-    private final AtomicLong servedNanos = new AtomicLong();
+    private final AtomicLong waitNanos = new AtomicLong();
+    private final AtomicLong buildNanos = new AtomicLong();
+    private final AtomicLong encodeNanos = new AtomicLong();
     private final AtomicLong servedBytes = new AtomicLong();
-    private final AtomicLong servedWorstNanos = new AtomicLong();
+    private final AtomicLong worstWaitNanos = new AtomicLong();
+    private final AtomicLong worstBuildNanos = new AtomicLong();
 
     private final AtomicLong diffed = new AtomicLong();
     private final AtomicLong diffedNanos = new AtomicLong();
@@ -33,12 +36,22 @@ public final class MirrorMetrics {
 
     /**
      * One chunk read and encoded for a neighbour. Called on whichever thread did the work.
+     *
+     * <p>Split three ways on purpose. <strong>Waiting</strong> is the chunk coming off disk and then a
+     * tick arriving to take the snapshot on - latency, spent idle, and it decides how long a border
+     * takes to fill in. <strong>Building</strong> and <strong>encoding</strong> are work actually
+     * done, off the main thread, and they are what a busy border would cost. Reported as one number
+     * they are indistinguishable, which made a mirror that is merely slow look like an expensive
+     * one.</p>
      */
-    public void served(final long nanos, final int bytes) {
+    public void served(final long waited, final long built, final long encoded, final int bytes) {
         this.served.incrementAndGet();
-        this.servedNanos.addAndGet(nanos);
+        this.waitNanos.addAndGet(waited);
+        this.buildNanos.addAndGet(built);
+        this.encodeNanos.addAndGet(encoded);
         this.servedBytes.addAndGet(bytes);
-        this.servedWorstNanos.accumulateAndGet(nanos, Math::max);
+        this.worstWaitNanos.accumulateAndGet(waited, Math::max);
+        this.worstBuildNanos.accumulateAndGet(built, Math::max);
     }
 
     /**
@@ -63,10 +76,14 @@ public final class MirrorMetrics {
         final long servedCount = this.served.getAndSet(0L);
         if (servedCount > 0L) {
             logger.info(String.format(
-                "Mirror served %d chunk(s) to neighbours: %.1fms each on average, worst %.1fms, %.1fKB each",
+                "Mirror served %d chunk(s) to neighbours, each averaging %.1fms waiting (worst %.1f), "
+                    + "%.1fms building (worst %.1f), %.1fms encoding, %.1fKB",
                 servedCount,
-                millis(this.servedNanos.getAndSet(0L) / servedCount),
-                millis(this.servedWorstNanos.getAndSet(0L)),
+                millis(this.waitNanos.getAndSet(0L) / servedCount),
+                millis(this.worstWaitNanos.getAndSet(0L)),
+                millis(this.buildNanos.getAndSet(0L) / servedCount),
+                millis(this.worstBuildNanos.getAndSet(0L)),
+                millis(this.encodeNanos.getAndSet(0L) / servedCount),
                 this.servedBytes.getAndSet(0L) / 1024.0 / servedCount));
         }
         final long diffedCount = this.diffed.getAndSet(0L);

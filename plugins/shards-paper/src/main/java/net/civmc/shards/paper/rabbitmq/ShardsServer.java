@@ -135,14 +135,17 @@ public final class ShardsServer implements AutoCloseable {
     }
 
     private ChunkStateResponse answer(final ChunkStateRequest request) {
-        final long startedAt = System.nanoTime();
         try {
-            final byte[] encoded = ChunkStateCodec.toBytes(
-                this.chunks.read(request.world(), request.chunkX(), request.chunkZ())
-                    .get(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS));
-            // Timed from here rather than from the chunk load, so this is the work this shard does for
-            // a neighbour rather than however long it waited for a chunk to come off disk
-            this.metrics.served(System.nanoTime() - startedAt, encoded.length);
+            final ChunkStateProvider.ChunkRead read = this.chunks
+                .read(request.world(), request.chunkX(), request.chunkZ())
+                .get(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            final long encodeStartedAt = System.nanoTime();
+            final byte[] encoded = ChunkStateCodec.toBytes(read.state());
+            // Reported in three parts, because they are not the same thing at all: waiting for a chunk
+            // is latency the server spends idle, while building and encoding is work it actually does.
+            // A single figure made a mirror that is merely slow to fill look like one that is expensive
+            this.metrics.served(read.waitNanos(), read.buildNanos(), System.nanoTime() - encodeStartedAt,
+                encoded.length);
             return ChunkStateResponse.of(request.requestId(), request.world(), request.chunkX(),
                 request.chunkZ(), Base64.getEncoder().encodeToString(encoded));
         } catch (final InterruptedException exception) {

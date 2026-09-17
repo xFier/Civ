@@ -33,11 +33,19 @@ public final class ChunkStateProvider {
     }
 
     /**
+     * @param waitNanos getting hold of the chunk: loading it if it was not in memory, then waiting for
+     *     a tick to take the snapshot on. Latency, not work - the server is idle for most of it
+     * @param buildNanos turning the snapshot into sections. Real work, off the main thread
+     */
+    public record ChunkRead(ChunkState state, long waitNanos, long buildNanos) {
+    }
+
+    /**
      * Reads one chunk, loading it if it is not already in memory.
      *
      * @return the chunk's contents, or a failed future when this shard cannot honestly answer
      */
-    public CompletableFuture<ChunkState> read(final String worldName, final int chunkX, final int chunkZ) {
+    public CompletableFuture<ChunkRead> read(final String worldName, final int chunkX, final int chunkZ) {
         final World world = Bukkit.getWorld(worldName);
         if (world == null) {
             return CompletableFuture.failedFuture(
@@ -47,11 +55,16 @@ public final class ChunkStateProvider {
             return CompletableFuture.failedFuture(
                 new IllegalArgumentException("This shard owns no part of chunk " + chunkX + ", " + chunkZ));
         }
+        final long askedAt = System.nanoTime();
         return world.getChunkAtAsync(chunkX, chunkZ)
             // Still on the main thread, and deliberately only this: a snapshot is a copy, and copying
             // is all the main thread should be asked to do for somebody else's rendering
             .thenApply(Chunk::getChunkSnapshot)
-            .thenApplyAsync(snapshot -> toState(snapshot, world.getMinHeight(), world.getMaxHeight()));
+            .thenApplyAsync(snapshot -> {
+                final long snapshotAt = System.nanoTime();
+                final ChunkState state = toState(snapshot, world.getMinHeight(), world.getMaxHeight());
+                return new ChunkRead(state, snapshotAt - askedAt, System.nanoTime() - snapshotAt);
+            });
     }
 
     /**
