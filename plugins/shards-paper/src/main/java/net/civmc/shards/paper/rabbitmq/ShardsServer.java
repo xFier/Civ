@@ -25,6 +25,7 @@ import net.civmc.shards.api.ChunkStateResponse;
 import net.civmc.shards.api.ShardsRabbitMqTopology;
 import net.civmc.shards.api.mirror.ChunkStateCodec;
 import net.civmc.shards.paper.mirror.ChunkStateProvider;
+import net.civmc.shards.paper.mirror.MirrorMetrics;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -56,17 +57,20 @@ public final class ShardsServer implements AutoCloseable {
     private final JavaPlugin plugin;
     private final Logger logger;
     private final ChunkStateProvider chunks;
+    private final MirrorMetrics metrics;
     private volatile boolean closed;
     private Connection connection;
     private Channel channel;
 
     public ShardsServer(final ConnectionFactory connectionFactory, final String serverName,
-                        final JavaPlugin plugin, final Logger logger, final ChunkStateProvider chunks) {
+                        final JavaPlugin plugin, final Logger logger, final ChunkStateProvider chunks,
+                        final MirrorMetrics metrics) {
         this.connectionFactory = connectionFactory;
         this.serverName = serverName;
         this.plugin = plugin;
         this.logger = logger;
         this.chunks = chunks;
+        this.metrics = metrics;
     }
 
     public boolean start() {
@@ -132,9 +136,16 @@ public final class ShardsServer implements AutoCloseable {
 
     private ChunkStateResponse answer(final ChunkStateRequest request) {
         try {
-            final byte[] encoded = ChunkStateCodec.toBytes(
-                this.chunks.read(request.world(), request.chunkX(), request.chunkZ())
-                    .get(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS));
+            final ChunkStateProvider.ChunkRead read = this.chunks
+                .read(request.world(), request.chunkX(), request.chunkZ())
+                .get(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            final long encodeStartedAt = System.nanoTime();
+            final byte[] encoded = ChunkStateCodec.toBytes(read.state());
+            // Reported in three parts, because they are not the same thing at all: waiting for a chunk
+            // is latency the server spends idle, while building and encoding is work it actually does.
+            // A single figure made a mirror that is merely slow to fill look like one that is expensive
+            this.metrics.served(read.waitNanos(), read.buildNanos(), System.nanoTime() - encodeStartedAt,
+                encoded.length);
             return ChunkStateResponse.of(request.requestId(), request.world(), request.chunkX(),
                 request.chunkZ(), Base64.getEncoder().encodeToString(encoded));
         } catch (final InterruptedException exception) {
