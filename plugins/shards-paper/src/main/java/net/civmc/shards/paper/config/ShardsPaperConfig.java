@@ -16,10 +16,13 @@ import org.bukkit.configuration.file.FileConfiguration;
  *     off, which means a server that is killed rather than stopped loses everything since they arrived
  * @param arrivalTitle MiniMessage shown to a player crossing in from another shard, blank for none
  * @param arrivalSubtitle MiniMessage shown beneath it, blank for none
+ * @param skySyncSeconds how often this server asks the proxy what the sky should look like. Zero
+ *     leaves it running its own clock and weather, so a crossing can go from noon into a storm
  * @param borderStyle what the border is drawn with
  */
 public record ShardsPaperConfig(String serverName, String failureMessage, int saveIntervalSeconds,
-                                String arrivalTitle, String arrivalSubtitle, BorderStyle borderStyle,
+                                String arrivalTitle, String arrivalSubtitle, int skySyncSeconds,
+                                BorderStyle borderStyle,
                                 String user, String password, String host, int port) {
 
     /**
@@ -45,6 +48,9 @@ public record ShardsPaperConfig(String serverName, String failureMessage, int sa
         }
         arrivalTitle = arrivalTitle == null ? "" : arrivalTitle;
         arrivalSubtitle = arrivalSubtitle == null ? "" : arrivalSubtitle;
+        if (skySyncSeconds < 0) {
+            throw new IllegalArgumentException("sky-sync-seconds must not be negative");
+        }
         borderStyle = borderStyle == null ? BorderStyle.PARTICLES : borderStyle;
         user = requireNonBlank(user, "rabbitmq.user");
         password = password == null ? "" : password;
@@ -68,6 +74,7 @@ public record ShardsPaperConfig(String serverName, String failureMessage, int sa
             configuration.getInt("save-interval-seconds", 60),
             arrival == null ? "" : arrival.getString("title", ""),
             arrival == null ? "" : arrival.getString("subtitle", ""),
+            configuration.getInt("sky-sync-seconds", 5),
             borderStyle(configuration.getString("border-style", "particles")),
             rabbitmq.getString("user", "guest"),
             rabbitmq.getString("password", "guest"),

@@ -27,6 +27,13 @@ public final class ShardsRabbitMqTopology {
     // it, and its reply would be dropped as unmatched, so it is dropped here instead
     public static final int BORDER_PROBE_TTL_MILLIS = 10_000;
 
+    public static final String SKY_STATE_QUEUE = "shards.sky.state";
+    // The sky moves on while a request waits, so an answer to one that has been sitting here would
+    // put a shard behind by however long it sat. Dropped instead: the next poll is seconds away and
+    // asks about now
+    public static final int SKY_STATE_TTL_MILLIS = 10_000;
+    public static final String NIGHT_SKIP_QUEUE = "shards.sky.nightskip";
+
     /**
      * Every request queue survives a broker restart, including the probe queue, whose messages are
      * worthless within seconds.

@@ -21,6 +21,22 @@ arrival:
   title: ""
   subtitle: ""
 
+# How often this server asks the proxy what the sky should look like, in seconds.
+#
+# Every shard generates the same world from the same seed, so the ground either side of a border is
+# identical - which makes the sky the one thing that gives away that a crossing changed servers.
+# Without this, each shard runs its own clock and its own weather cycle, and walking over a line can
+# take a player from noon into a thunderstorm over continuous terrain.
+#
+# Time is corrected rather than driven: the daylight cycle keeps running, and this only steps in when
+# the local clock has drifted more than a couple of seconds, so the sky still moves if the proxy goes
+# quiet. Weather is the proxy's outright - this server's own weather cycle is turned off - because
+# there is no cycle to derive a shared storm from. Sleeping through the night is forwarded to the
+# proxy, so a bed still works and moves everybody's morning together, not just this shard's.
+#
+# Set to 0 to leave this server's sky to itself.
+sky-sync-seconds: 5
+
 # What the border between shards is drawn with, where a player can see one.
 #
 #   particles  coloured dust, repainted twice a second. Nothing exists in the world between passes,
