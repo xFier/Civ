@@ -434,6 +434,12 @@ public final class MirrorView implements Listener {
         if (world == null) {
             return;
         }
+        // Whole, not a difference: an announcement about entities carries everything the chunk has, so
+        // one that is absent from it has gone. An announcement about blocks says nothing about them,
+        // which is not the same as saying there are none
+        final List<MirroredEntity> entities = update.entitiesDescribed()
+            ? update.entities()
+            : current.entities();
         final Map<Position, BlockData> blocks = new HashMap<>(current.blocks());
         final Map<Position, BlockData> send = new HashMap<>();
         for (final BlockUpdate block : update.updates()) {
@@ -452,11 +458,21 @@ public final class MirrorView implements Listener {
         }
         // Keeps the fetch time, because nothing has been re-read - only corrected
         this.mirrored.put(key, new Mirrored(blocks, blocks, current.fetchedAtNanos(),
-            current.stale() || missedOne, update.publisherId(), update.revision(), current.entities()));
+            current.stale() || missedOne, update.publisherId(), update.revision(), entities));
+        final boolean entitiesChanged = update.entitiesDescribed()
+            && !current.entities().equals(entities);
         for (final Player viewer : Bukkit.getOnlinePlayers()) {
             final Set<ChunkKey> alreadyShown = this.shown.get(viewer.getUniqueId());
-            if (alreadyShown != null && alreadyShown.contains(key)) {
+            if (alreadyShown == null || !alreadyShown.contains(key)) {
+                continue;
+            }
+            if (!send.isEmpty()) {
                 viewer.sendMultiBlockChange(send);
+            }
+            if (entitiesChanged) {
+                // Told the whole list rather than what moved: the drawing side works out for itself
+                // what to add, change and take away, which is the same thing it does on a chunk read
+                this.entities.show(viewer, key.world(), key.x(), key.z(), entities);
             }
         }
     }

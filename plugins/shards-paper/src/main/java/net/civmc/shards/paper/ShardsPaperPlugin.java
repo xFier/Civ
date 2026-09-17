@@ -24,6 +24,7 @@ import net.civmc.shards.paper.mirror.EntityDataLayout;
 import net.civmc.shards.paper.mirror.LearnedEntityDataLayout;
 import net.civmc.shards.paper.mirror.ChunkStateProvider;
 import net.civmc.shards.paper.mirror.MirrorEntities;
+import net.civmc.shards.paper.mirror.MirrorEntityPublisher;
 import net.civmc.shards.paper.mirror.MirrorEntityView;
 import net.civmc.shards.paper.mirror.MirrorMetrics;
 import net.civmc.shards.paper.mirror.MirrorPlayerPublisher;
@@ -278,6 +279,14 @@ public final class ShardsPaperPlugin extends JavaPlugin {
             this.config.serverName(), getLogger(), revisions);
         getServer().getPluginManager().registerEvents(publisher, this);
         getServer().getScheduler().runTaskTimer(this, publisher::flush, 1L, 1L);
+
+        // The same for the frames and stands, on the same count, so a missed announcement of either is
+        // noticed the same way. Separate from the blocks because nothing about a frame is a block
+        // change and no block event ever fires for one
+        final MirrorEntityPublisher entityPublisher = new MirrorEntityPublisher(this.border, this.client,
+            this.config.serverName(), revisions);
+        getServer().getPluginManager().registerEvents(entityPublisher, this);
+        getServer().getScheduler().runTaskTimer(this, entityPublisher::flush, 1L, 1L);
 
         // Where this shard's players are, every tick, for the shards that can see that ground. Sent
         // whether or not this server can show anybody: a neighbour may be able to even if we cannot
