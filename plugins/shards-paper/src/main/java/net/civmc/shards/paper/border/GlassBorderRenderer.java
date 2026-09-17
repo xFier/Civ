@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import org.bukkit.Bukkit;
+import org.bukkit.Color;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -38,8 +39,12 @@ import org.joml.Vector3f;
  * <p>Each pane stands in the open space the player is in, found by looking down from their own level
  * rather than down from the sky. That is what puts the border on the lake bed instead of the lake, on
  * the cave floor instead of the hillside overhead, and on the ground under a tree instead of in its
- * canopy - and it is why a border running into a hillside simply stops being drawn rather than being
- * drawn inside the rock.</p>
+ * canopy.</p>
+ *
+ * <p>They glow, so the outline is drawn through anything in front of them. Glass inside rock is
+ * invisible, and a border is worst as a surprise: digging towards one, running a tunnel beside one,
+ * or standing in a building built over one are exactly the places where the first you would otherwise
+ * know of it is being stopped.</p>
  *
  * <p>Everything is per player, which is what makes this usable at all: displays are real entities and
  * would otherwise be shown to everybody, including people on the far side who are not being told
@@ -86,6 +91,10 @@ public final class GlassBorderRenderer implements BorderRenderer {
 
     private static final BlockData CROSSABLE_GLASS = Material.LIGHT_BLUE_STAINED_GLASS.createBlockData();
     private static final BlockData CLOSED_GLASS = Material.RED_STAINED_GLASS.createBlockData();
+    // The outline colours, matched to the glass so a pane seen through rock and the same pane seen in
+    // the open are recognisably the one thing
+    private static final Color CROSSABLE_GLOW = Color.fromRGB(120, 200, 255);
+    private static final Color CLOSED_GLOW = Color.fromRGB(255, 90, 90);
 
     private final JavaPlugin plugin;
     private final Map<UUID, Map<Pane, Standing>> shown = new HashMap<>();
@@ -132,6 +141,7 @@ public final class GlassBorderRenderer implements BorderRenderer {
                 // would mean a despawn and a respawn at every face at once whenever a neighbour goes
                 // down, which is the moment a player most wants the border to stay put
                 display.setBlock(stillWanted ? CROSSABLE_GLASS : CLOSED_GLASS);
+                display.setGlowColorOverride(stillWanted ? CROSSABLE_GLOW : CLOSED_GLOW);
                 entry.setValue(new Standing(display, stillWanted));
             }
         }
@@ -179,13 +189,7 @@ public final class GlassBorderRenderer implements BorderRenderer {
                 // Sorted nearest first, so everything past here is further still
                 break;
             }
-            final Integer base = baseUnder(world, face.insideX(), face.insideZ(), playerY);
-            if (base == null) {
-                // Solid from the player's own level upwards, so there is nowhere at this face a pane
-                // could be seen. Where the border runs into a hillside it stops being drawn, which is
-                // the truth: glass inside rock is not a border anybody can see
-                continue;
-            }
+            final int base = baseUnder(world, face.insideX(), face.insideZ(), playerY);
             wanted.put(new Pane(face.insideX(), face.insideZ(), face.seamCoordinate(), face.alongX(), base),
                 drawn.crossable());
         }
@@ -193,7 +197,7 @@ public final class GlassBorderRenderer implements BorderRenderer {
     }
 
     /**
-     * Where a pane at this column should stand, or null if it would only ever be inside rock.
+     * Where a pane at this column should stand.
      *
      * <p>Found by looking for the open space the player themselves is in and following its floor
      * down, rather than by asking for the highest block. The highest block is wrong three ways over:
@@ -205,8 +209,12 @@ public final class GlassBorderRenderer implements BorderRenderer {
      *
      * <p>Water and air are both open here, so the search comes to rest on the lake bed rather than on
      * the lake, and a border crossing one is drawn where somebody swimming can see it.</p>
+     *
+     * <p>Where the column is solid all the way up - a border running into a hillside, or through a
+     * wall somebody has built on it - the pane stands at the player's own level instead. It is inside
+     * rock there and invisible as glass, which is exactly the case the glow is for.</p>
      */
-    private static Integer baseUnder(final World world, final int x, final int z, final int playerY) {
+    private static int baseUnder(final World world, final int x, final int z, final int playerY) {
         final int ceiling = Math.min(world.getMaxHeight() - 1, playerY + OPEN_ABOVE);
         int open = Integer.MIN_VALUE;
         for (int y = Math.max(playerY, world.getMinHeight()); y <= ceiling; y++) {
@@ -216,7 +224,7 @@ public final class GlassBorderRenderer implements BorderRenderer {
             }
         }
         if (open == Integer.MIN_VALUE) {
-            return null;
+            return playerY - SUNK;
         }
         final int lowest = Math.max(world.getMinHeight(), playerY - FLOOR_BELOW);
         int floor = open;
@@ -236,6 +244,12 @@ public final class GlassBorderRenderer implements BorderRenderer {
             // that chunk next
             spawned.setPersistent(false);
             spawned.setBlock(crossable ? CROSSABLE_GLASS : CLOSED_GLASS);
+            // Outlined, and the outline is drawn through whatever is in front of it. Without this a
+            // border is only ever a surprise to somebody digging towards it, or walking a tunnel
+            // beside it, or in a building standing on it - all the places where finding out by being
+            // stopped is worst
+            spawned.setGlowing(true);
+            spawned.setGlowColorOverride(crossable ? CROSSABLE_GLOW : CLOSED_GLOW);
             spawned.setBrightness(FULLY_LIT);
             spawned.setViewRange(VIEW_RANGE);
             // It has depth and sits on a line, so it must stay where the line is rather than turning
