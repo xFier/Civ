@@ -19,6 +19,7 @@ import net.civmc.shards.velocity.config.ShardsConfig;
 import com.velocitypowered.api.command.CommandManager;
 import net.civmc.shards.velocity.placement.ShardConnectionListener;
 import net.civmc.shards.velocity.presence.NetworkListCommand;
+import net.civmc.shards.velocity.presence.NetworkTabList;
 import net.civmc.shards.velocity.placement.ShardPlacementService;
 import net.civmc.shards.velocity.playerdata.InFlightTransfers;
 import net.civmc.shards.velocity.playerdata.PlayerDataService;
@@ -38,6 +39,10 @@ import org.slf4j.Logger;
 
 @Plugin(id = "shards", name = "Shards", version = "1.0.0", authors = {"Fier"})
 public final class ShardsVelocityPlugin {
+
+    // Slow on purpose: it costs a pass over every pair of players, and nothing it fixes is urgent -
+    // the events do the urgent half
+    private static final long TAB_LIST_SYNC_SECONDS = 10L;
 
     private final ProxyServer proxyServer;
     private final Logger logger;
@@ -94,6 +99,25 @@ public final class ShardsVelocityPlugin {
         }
         startLockExpiry(shardsConfig);
         registerNetworkList(shardsConfig);
+        startNetworkTabList(shardsConfig);
+    }
+
+    /**
+     * Shows the whole network in everybody's tab list, not just the shard they are standing on.
+     *
+     * <p>Kept up to date by events and by a slow sweep together: the events put an arrival or a
+     * departure right at once, and the sweep refreshes the pings - which would otherwise be whatever
+     * they were at the moment somebody connected - and quietly repairs anything an event missed.</p>
+     */
+    private void startNetworkTabList(final ShardsConfig shardsConfig) {
+        if (!shardsConfig.networkTabList()) {
+            return;
+        }
+        final NetworkTabList tabList = new NetworkTabList(this.proxyServer);
+        this.proxyServer.getEventManager().register(this, tabList);
+        this.proxyServer.getScheduler().buildTask(this, tabList::sync)
+            .repeat(TAB_LIST_SYNC_SECONDS, TimeUnit.SECONDS)
+            .schedule();
     }
 
     /**

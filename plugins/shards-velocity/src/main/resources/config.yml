@@ -48,6 +48,13 @@ holding-server: "pvp"
 # so set this to false if something else on this network should answer /list instead.
 network-list: true
 
+# Whether the players on other shards appear in everybody's tab list. A shard sends only its own
+# players, so without this the list shows one shard's population rather than the network's - the same
+# fault as /list above, on the thing people have open all the time. Entries added here carry no
+# per-server display name, so a plugin that colours names on one shard does not colour them for
+# somebody looking from another.
+network-tab-list: true
+
 # A lock on a player's data is only ever released by the server holding it, so a shard that dies
 # and does not come back keeps its players unclaimable. After this many seconds of a shard not
 # answering - and only while the proxy has nobody connected to it - its locks are dropped and those
