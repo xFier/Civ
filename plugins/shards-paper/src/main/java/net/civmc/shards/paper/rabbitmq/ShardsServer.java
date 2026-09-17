@@ -208,7 +208,7 @@ public final class ShardsServer implements AutoCloseable {
                         response = ChunkStateResponse.of(request.requestId(), request.world(),
                             request.chunkX(), request.chunkZ(),
                             Base64.getEncoder().encodeToString(encoded), read.publisherId(),
-                            read.revision());
+                            read.revision(), read.entities());
                     } catch (final RuntimeException exception) {
                         this.logger.log(Level.WARNING, "Could not encode a chunk", exception);
                         response = ChunkStateResponse.error(request.requestId(), "Could not encode that chunk");

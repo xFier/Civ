@@ -6,6 +6,7 @@ import com.github.retrooper.packetevents.event.PacketSendEvent;
 import com.github.retrooper.packetevents.protocol.entity.data.EntityData;
 import com.github.retrooper.packetevents.protocol.entity.data.EntityDataType;
 import com.github.retrooper.packetevents.protocol.entity.data.EntityDataTypes;
+import com.github.retrooper.packetevents.protocol.item.ItemStack;
 import com.github.retrooper.packetevents.protocol.packettype.PacketType;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityMetadata;
 import io.github.retrooper.packetevents.util.SpigotReflectionUtil;
@@ -13,6 +14,7 @@ import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Queue;
 import java.util.Set;
@@ -83,7 +85,8 @@ public final class LearnedEntityDataLayout extends PacketListenerAbstract implem
      * @param viewer whose connection the packet was on, which is how the world it happened in is found
      *     later. A uuid rather than anything live, because this crosses from a network thread
      */
-    private record Sighting(UUID viewer, int entityId, Field field, int index) {
+    private record Sighting(UUID viewer, int entityId, Field field, int index,
+                            EntityDataType<?> dataType) {
     }
 
     /**
@@ -91,11 +94,15 @@ public final class LearnedEntityDataLayout extends PacketListenerAbstract implem
      */
     private static final class Candidate {
         private final Set<Integer> indices = new HashSet<>();
+        // The wire type as well as the number, because sending the right number with the wrong type is
+        // the same protocol error as sending the wrong number. An item is carried as a plain stack on
+        // some entities and an optional one on others, and only the packets say which
+        private final Set<EntityDataType<?>> types = new HashSet<>();
         private int sightings;
         private boolean announced;
 
         private boolean settled() {
-            return this.sightings >= CONFIDENT_AFTER && this.indices.size() == 1;
+            return this.sightings >= CONFIDENT_AFTER && this.indices.size() == 1 && this.types.size() == 1;
         }
     }
 
@@ -108,6 +115,31 @@ public final class LearnedEntityDataLayout extends PacketListenerAbstract implem
                 return OptionalInt.empty();
             }
             return OptionalInt.of(candidate.indices.iterator().next());
+        }
+    }
+
+    /**
+     * The field holding an item on this kind of entity, ready to send, or empty when it has not been
+     * read off a real one yet.
+     *
+     * <p>Built here rather than by the caller because the wire type is half the answer and is not
+     * something the caller can be told over {@link EntityDataLayout} without naming the packet
+     * library in it.</p>
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public Optional<EntityData<?>> itemData(final EntityType type, final ItemStack item) {
+        synchronized (this.lock) {
+            final Map<Field, Candidate> fields = this.learned.get(type);
+            final Candidate candidate = fields == null ? null : fields.get(Field.ITEM);
+            if (candidate == null || !candidate.settled()) {
+                return Optional.empty();
+            }
+            final EntityDataType<?> dataType = candidate.types.iterator().next();
+            final int index = candidate.indices.iterator().next();
+            final Object value = EntityDataTypes.OPTIONAL_ITEMSTACK.equals(dataType)
+                ? Optional.ofNullable(item)
+                : item;
+            return Optional.of(new EntityData(index, dataType, value));
         }
     }
 
@@ -137,7 +169,8 @@ public final class LearnedEntityDataLayout extends PacketListenerAbstract implem
             if (field == null || this.pending.size() >= PENDING_CAP) {
                 continue;
             }
-            this.pending.add(new Sighting(viewer, metadata.getEntityId(), field, data.getIndex()));
+            this.pending.add(new Sighting(viewer, metadata.getEntityId(), field, data.getIndex(),
+                data.getType()));
         }
     }
 
@@ -170,18 +203,21 @@ public final class LearnedEntityDataLayout extends PacketListenerAbstract implem
                 // it came from, and a guess here would defeat the point of the whole class
                 continue;
             }
-            record(entity.getType(), sighting.field(), sighting.index());
+            record(entity.getType(), sighting.field(), sighting.index(), sighting.dataType());
         }
     }
 
-    private void record(final EntityType type, final Field field, final int index) {
+    private void record(final EntityType type, final Field field, final int index,
+                        final EntityDataType<?> dataType) {
         synchronized (this.lock) {
             final Candidate candidate = this.learned
                 .computeIfAbsent(type, ignored -> new EnumMap<>(Field.class))
                 .computeIfAbsent(field, ignored -> new Candidate());
             final boolean wasSettled = candidate.settled();
             candidate.sightings++;
-            if (!candidate.indices.add(index) && candidate.announced) {
+            final boolean knewIndex = !candidate.indices.add(index);
+            final boolean knewType = !candidate.types.add(dataType);
+            if (knewIndex && knewType && candidate.announced) {
                 return;
             }
             if (wasSettled && candidate.indices.size() > 1) {

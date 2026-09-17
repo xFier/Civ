@@ -23,6 +23,8 @@ import net.civmc.shards.paper.mirror.ChunkRevisions;
 import net.civmc.shards.paper.mirror.EntityDataLayout;
 import net.civmc.shards.paper.mirror.LearnedEntityDataLayout;
 import net.civmc.shards.paper.mirror.ChunkStateProvider;
+import net.civmc.shards.paper.mirror.MirrorEntities;
+import net.civmc.shards.paper.mirror.MirrorEntityView;
 import net.civmc.shards.paper.mirror.MirrorMetrics;
 import net.civmc.shards.paper.mirror.MirrorPlayerPublisher;
 import net.civmc.shards.paper.mirror.MirrorPlayerView;
@@ -255,7 +257,8 @@ public final class ShardsPaperPlugin extends JavaPlugin {
         // As far as the client renders, which is what has to look right. The neighbour's own view
         // distance does not come into it - it is this server's players who are looking
         final MirrorView mirror = new MirrorView(this, this.border, outlook, this.client,
-            this.config.serverName(), getLogger(), getServer().getViewDistance(), metrics);
+            this.config.serverName(), getLogger(), getServer().getViewDistance(), metrics,
+            startEntityMirror());
         this.mirror = mirror;
         startMirrorStore(mirror);
         this.mirrorServer = new ShardsServer(this.config.connectionFactory(), this.config.serverName(), this,
@@ -339,6 +342,33 @@ public final class ShardsPaperPlugin extends JavaPlugin {
             getLogger().log(Level.WARNING, "PacketEvents is installed but its metadata could not be "
                 + "read, so nothing that needs a metadata field number will be drawn", exception);
             return EntityDataLayout.UNKNOWN;
+        }
+    }
+
+    /**
+     * Starts drawing the frames and stands a neighbouring shard has.
+     *
+     * <p>Behind the packet guard like the rest of it, and behind the metadata reader as well: the item
+     * in a frame is a numbered field, and the number is read off this server's own entities rather than
+     * guessed. Without the reader a frame is still drawn - empty - which is why this does not refuse to
+     * start without it.</p>
+     */
+    private MirrorEntities startEntityMirror() {
+        final Plugin packetEvents = getServer().getPluginManager().getPlugin("packetevents");
+        if (packetEvents == null || !packetEvents.isEnabled()) {
+            getLogger().info("PacketEvents is not installed, so the frames and stands on other shards "
+                + "will not be drawn. The blocks of their builds still are");
+            return MirrorEntities.NONE;
+        }
+        try {
+            if (this.entityDataLayout instanceof LearnedEntityDataLayout learned) {
+                return new MirrorEntityView(learned);
+            }
+            return MirrorEntities.NONE;
+        } catch (final RuntimeException | LinkageError exception) {
+            getLogger().log(Level.SEVERE, "PacketEvents is installed but could not be used, so the "
+                + "frames and stands on other shards will not be drawn", exception);
+            return MirrorEntities.NONE;
         }
     }
 
