@@ -14,6 +14,7 @@ import net.civmc.shards.paper.border.GlassBorderRenderer;
 import net.civmc.shards.paper.border.ParticleBorderRenderer;
 import net.civmc.shards.paper.border.ShardBorder;
 import net.civmc.shards.paper.border.ShardBorderListener;
+import net.civmc.shards.paper.border.ShardRespawnListener;
 import net.civmc.shards.paper.border.TransferService;
 import net.civmc.shards.paper.config.ShardsPaperConfig;
 import net.civmc.shards.paper.playerdata.OwnedPlayers;
@@ -77,6 +78,8 @@ public final class ShardsPaperPlugin extends JavaPlugin {
         }
         getServer().getPluginManager().registerEvents(
             new ShardBorderListener(this.border, this.transfers, notices, outlook), this);
+        getServer().getPluginManager().registerEvents(
+            new ShardRespawnListener(this, this.border, this.transfers, getLogger()), this);
         getCommand("shardsnapshot").setExecutor(new SnapshotVerifyCommand());
         startPeriodicSave();
         startBorderView(this.view);
