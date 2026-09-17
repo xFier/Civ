@@ -441,6 +441,75 @@ public final class MirrorView implements Listener {
     }
 
     /**
+     * Puts back what was saved from the last run, before anybody is online.
+     *
+     * <p>Every chunk comes back marked to be read again, so what is restored is shown at once and then
+     * corrected the moment somebody looks at it. That is what keeps this from being a catch-up log:
+     * nothing loaded is trusted, it is only drawn while the truth is being fetched - and it is all
+     * there is to draw when the owner cannot be reached at all.</p>
+     *
+     * <p>A block the game no longer knows is dropped one block at a time rather than losing the chunk,
+     * because a saved mirror outlives a game update.</p>
+     */
+    public void restore(final List<MirrorStore.Saved> saved) {
+        int blocksRestored = 0;
+        int unknownBlocks = 0;
+        for (final MirrorStore.Saved chunk : saved) {
+            final Map<Position, BlockData> blocks = new HashMap<>(chunk.blocks().size());
+            for (final MirrorStore.SavedBlock block : chunk.blocks()) {
+                try {
+                    blocks.put(Position.block(block.x(), block.y(), block.z()),
+                        Bukkit.createBlockData(block.blockData()));
+                } catch (final IllegalArgumentException noSuchBlock) {
+                    unknownBlocks++;
+                }
+            }
+            if (blocks.isEmpty()) {
+                continue;
+            }
+            blocksRestored += blocks.size();
+            // Nothing has been shown to anybody yet, so there is nothing to put back to our own copy
+            // and send is simply the difference
+            this.mirrored.put(new ChunkKey(chunk.world(), chunk.x(), chunk.z()),
+                new Mirrored(blocks, blocks, System.nanoTime(), true, chunk.publisherId(),
+                    chunk.revision()));
+        }
+        if (unknownBlocks > 0) {
+            this.logger.warning("Dropped " + unknownBlocks + " saved mirror block(s) the game no longer "
+                + "knows; those chunks will be right again as soon as they are read from their owner");
+        }
+        this.logger.info("Restored " + this.mirrored.size() + " mirrored chunk(s), " + blocksRestored
+            + " block(s), from the last run");
+    }
+
+    /**
+     * What is worth saving, copied on the main thread so the writing can be done off it.
+     *
+     * <p>Only chunks with something to draw. A stretch of border nobody has built along differs in
+     * nothing, and writing out that it differs in nothing helps no one - it is re-fetched just the
+     * same, and finding nothing is the cheap case.</p>
+     */
+    public List<MirrorStore.Saved> toSave() {
+        final List<MirrorStore.Saved> saved = new ArrayList<>();
+        for (final Map.Entry<ChunkKey, Mirrored> entry : this.mirrored.entrySet()) {
+            final Map<Position, BlockData> blocks = entry.getValue().blocks();
+            if (blocks.isEmpty()) {
+                continue;
+            }
+            final List<MirrorStore.SavedBlock> savedBlocks = new ArrayList<>(blocks.size());
+            for (final Map.Entry<Position, BlockData> block : blocks.entrySet()) {
+                savedBlocks.add(new MirrorStore.SavedBlock(block.getKey().blockX(),
+                    block.getKey().blockY(), block.getKey().blockZ(),
+                    block.getValue().getAsString()));
+            }
+            saved.add(new MirrorStore.Saved(entry.getKey().world(), entry.getKey().x(),
+                entry.getKey().z(), entry.getValue().publisherId(), entry.getValue().revision(),
+                savedBlocks));
+        }
+        return saved;
+    }
+
+    /**
      * Forgets a player who has left, so their record of what they were shown does not outlive them.
      */
     @EventHandler(priority = EventPriority.MONITOR)
