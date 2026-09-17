@@ -8,6 +8,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import net.civmc.shards.api.region.ShardPoint;
 import net.civmc.shards.api.region.ShardRegion;
 import org.spongepowered.configurate.objectmapping.ConfigSerializable;
 import org.spongepowered.configurate.objectmapping.ObjectMapper;
@@ -67,6 +68,7 @@ public record ShardsConfig(
             // Not Map.copyOf: two shards can no longer claim the same block, but a stable iteration
             // order still keeps startup errors and lookups reproducible between restarts
             : Collections.unmodifiableMap(new LinkedHashMap<>(shards));
+        requireChunkAligned(shards);
         requireNoOverlap(shards);
     }
 
@@ -102,6 +104,34 @@ public record ShardsConfig(
         } catch (final IOException exception) {
             // Includes SerializationException, e.g. a required database key is missing
             throw new RuntimeException("Could not load Shards Velocity config", exception);
+        }
+    }
+
+    /**
+     * Every edge has to fall on a chunk boundary, so a chunk belongs to exactly one shard.
+     *
+     * <p>Not a tidiness rule. A chunk is the unit of nearly everything underneath: lighting,
+     * heightmaps, entity storage, ticking, and the packet a chunk is sent to a client in. A border
+     * through the middle of one means two servers computing different light and different heightmaps
+     * for the same ground, and it means a chunk with two owners - which the mirror cannot draw
+     * truthfully, because it has to ask somebody for that chunk and neither owner holds all of it.</p>
+     *
+     * <p>Refused rather than rounded. Snapping a border to the nearest chunk would move ownership of
+     * real ground without anyone saying so, and ownership is the one thing in this plugin that must
+     * never move quietly.</p>
+     */
+    private static void requireChunkAligned(final Map<String, List<ShardRegion>> shards) {
+        for (final Map.Entry<String, List<ShardRegion>> shard : shards.entrySet()) {
+            for (final ShardRegion region : shard.getValue()) {
+                for (final ShardPoint corner : region.vertices()) {
+                    if ((corner.x() & 15) != 0 || (corner.z() & 15) != 0) {
+                        throw new IllegalArgumentException("Shard " + shard.getKey() + " has a corner at "
+                            + corner.x() + ", " + corner.z() + " which is not on a chunk boundary. Every "
+                            + "coordinate must be a multiple of 16, so that a chunk belongs to exactly one "
+                            + "shard");
+                    }
+                }
+            }
         }
     }
 

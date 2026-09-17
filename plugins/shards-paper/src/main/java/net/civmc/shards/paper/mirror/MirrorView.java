@@ -58,9 +58,6 @@ import org.bukkit.plugin.java.JavaPlugin;
  */
 public final class MirrorView implements Listener {
 
-    // Every fourth block, matching the owner's own test. Only decides whether a chunk is worth asking
-    // about; which individual blocks are shown is decided exactly, block by block, when diffing
-    private static final int OWNERSHIP_SAMPLE_STEP = 4;
     // How long a fetched chunk is trusted before being asked for again. Crude, and the reason live
     // updates are the next slice: until they land this is the only thing that notices a neighbour
     // building something
@@ -118,10 +115,11 @@ public final class MirrorView implements Listener {
             for (int z = -this.radiusChunks; z <= this.radiusChunks; z++) {
                 final int chunkX = standingOn.getX() + x;
                 final int chunkZ = standingOn.getZ() + z;
-                final ShardPoint foreignBlock = firstForeignBlock(chunkX, chunkZ);
-                if (foreignBlock == null) {
+                if (!this.border.isChunkOutside(chunkX, chunkZ)) {
                     continue;
                 }
+                // Any block in it identifies the owner, because the whole chunk has one
+                final ShardPoint foreignBlock = new ShardPoint(chunkX << 4, chunkZ << 4);
                 final ChunkKey key = new ChunkKey(world.getName(), chunkX, chunkZ);
                 inRange.add(key);
                 show(viewer, key, foreignBlock, askingWhoOwns);
@@ -271,11 +269,9 @@ public final class MirrorView implements Listener {
                          final int x, final int y, final int z) {
         final int worldX = (key.x() << 4) + x;
         final int worldZ = (key.z() << 4) + z;
-        // Exact here, unlike the sampled test that chose the chunk: a chunk straddling a border is
-        // partly ours, and the part that is ours is not the neighbour's to describe
-        if (!this.border.isOutside(worldX, worldZ)) {
-            return;
-        }
+        // No per-block ownership test. Shard edges fall on chunk boundaries, so a chunk this was
+        // fetched for is foreign all the way through - and this runs sixteen thousand times a section,
+        // where a polygon test per block was the single most expensive thing the mirror did
         final String theirBlock = theirSection.isEmpty()
             ? "minecraft:air"
             : theirSection.palette().get(theirSection.indices()[ChunkSectionState.indexOf(x, y, z)]);
@@ -293,26 +289,24 @@ public final class MirrorView implements Listener {
         return blocks;
     }
 
-    /**
-     * The first block of a chunk that this shard does not own, or null if it owns all of it.
-     */
-    private ShardPoint firstForeignBlock(final int chunkX, final int chunkZ) {
-        for (int x = 0; x < 16; x += OWNERSHIP_SAMPLE_STEP) {
-            for (int z = 0; z < 16; z += OWNERSHIP_SAMPLE_STEP) {
-                final int blockX = (chunkX << 4) + x;
-                final int blockZ = (chunkZ << 4) + z;
-                if (this.border.isOutside(blockX, blockZ)) {
-                    return new ShardPoint(blockX, blockZ);
-                }
-            }
-        }
-        return null;
-    }
-
     private void forgetOutOfRange(final Player viewer, final Set<ChunkKey> inRange) {
         final Set<ChunkKey> alreadyShown = this.shown.get(viewer.getUniqueId());
         if (alreadyShown != null) {
             alreadyShown.retainAll(inRange);
+        }
+    }
+
+    /**
+     * Draws one chunk for one player again, because something rubbed their copy of it out.
+     *
+     * <p>Only forgets that they were shown it; the next pass sends it, which is under a second. Doing
+     * it that way rather than sending here means one place decides what a player is shown, and a
+     * repair cannot get ahead of a fetch that has not finished.</p>
+     */
+    public void redraw(final Player viewer, final int chunkX, final int chunkZ) {
+        final Set<ChunkKey> alreadyShown = this.shown.get(viewer.getUniqueId());
+        if (alreadyShown != null) {
+            alreadyShown.remove(new ChunkKey(viewer.getWorld().getName(), chunkX, chunkZ));
         }
     }
 
