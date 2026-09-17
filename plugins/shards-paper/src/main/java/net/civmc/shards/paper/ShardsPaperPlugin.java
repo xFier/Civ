@@ -20,6 +20,7 @@ import net.civmc.shards.paper.config.ShardsPaperConfig;
 import net.civmc.shards.paper.mirror.ChunkStateProvider;
 import net.civmc.shards.paper.mirror.MirrorMetrics;
 import net.civmc.shards.paper.mirror.MirrorRepairListener;
+import net.civmc.shards.paper.mirror.MirrorUpdatePublisher;
 import net.civmc.shards.paper.mirror.MirrorView;
 import net.civmc.shards.paper.mirror.UnownedEntityView;
 import net.civmc.shards.paper.mirror.UnownedGroundListener;
@@ -180,18 +181,26 @@ public final class ShardsPaperPlugin extends JavaPlugin {
             return;
         }
         final MirrorMetrics metrics = new MirrorMetrics();
-        this.mirrorServer = new ShardsServer(this.config.connectionFactory(), this.config.serverName(), this,
-            getLogger(), new ChunkStateProvider(this.border), metrics);
-        this.mirrorServer.start();
-
         // As far as the client renders, which is what has to look right. The neighbour's own view
         // distance does not come into it - it is this server's players who are looking
         final MirrorView mirror = new MirrorView(this, this.border, outlook, this.client,
             this.config.serverName(), getLogger(), getServer().getViewDistance(), metrics);
+        this.mirrorServer = new ShardsServer(this.config.connectionFactory(), this.config.serverName(), this,
+            getLogger(), new ChunkStateProvider(this.border), metrics,
+            // Announcements arrive on a broker thread and this reads the world and sends to players
+            update -> getServer().getScheduler().runTask(this, () -> mirror.applyUpdate(update)));
+        this.mirrorServer.start();
         getServer().getPluginManager().registerEvents(mirror, this);
         // A refused placement makes the client correct itself to what is really there, which for
         // another shard's ground is this server's own copy - so the mirror has to be drawn again
         getServer().getPluginManager().registerEvents(new MirrorRepairListener(this, mirror), this);
+
+        // Tells the other shards what has just changed here, so none of them has to re-read a chunk to
+        // find out. Flushed once a tick: a block changed several times in one tick is sent once
+        final MirrorUpdatePublisher publisher = new MirrorUpdatePublisher(this.border, this.client,
+            this.config.serverName(), getLogger());
+        getServer().getPluginManager().registerEvents(publisher, this);
+        getServer().getScheduler().runTaskTimer(this, publisher::flush, 1L, 1L);
         getServer().getScheduler().runTaskTimer(this, () -> {
             for (final Player player : Bukkit.getOnlinePlayers()) {
                 mirror.update(player);

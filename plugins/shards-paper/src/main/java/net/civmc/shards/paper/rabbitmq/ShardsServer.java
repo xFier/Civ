@@ -18,10 +18,12 @@ import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import net.civmc.shards.api.ChunkStateRequest;
 import net.civmc.shards.api.ChunkStateResponse;
+import net.civmc.shards.api.ChunkUpdateMessage;
 import net.civmc.shards.api.ShardsRabbitMqTopology;
 import net.civmc.shards.api.mirror.ChunkStateCodec;
 import net.civmc.shards.paper.mirror.ChunkStateProvider;
@@ -58,19 +60,21 @@ public final class ShardsServer implements AutoCloseable {
     private final Logger logger;
     private final ChunkStateProvider chunks;
     private final MirrorMetrics metrics;
+    private final Consumer<ChunkUpdateMessage> updates;
     private volatile boolean closed;
     private Connection connection;
     private Channel channel;
 
     public ShardsServer(final ConnectionFactory connectionFactory, final String serverName,
                         final JavaPlugin plugin, final Logger logger, final ChunkStateProvider chunks,
-                        final MirrorMetrics metrics) {
+                        final MirrorMetrics metrics, final Consumer<ChunkUpdateMessage> updates) {
         this.connectionFactory = connectionFactory;
         this.serverName = serverName;
         this.plugin = plugin;
         this.logger = logger;
         this.chunks = chunks;
         this.metrics = metrics;
+        this.updates = updates;
     }
 
     public boolean start() {
@@ -97,6 +101,7 @@ public final class ShardsServer implements AutoCloseable {
             this.channel.basicConsume(ShardsRabbitMqTopology.mirrorQueue(this.serverName), false,
                 deliverCallback, consumerTag -> {
                 });
+            consumeUpdates();
             this.logger.info("Answering chunk requests from other shards on "
                 + ShardsRabbitMqTopology.mirrorQueue(this.serverName));
             return true;
@@ -110,6 +115,33 @@ public final class ShardsServer implements AutoCloseable {
             Bukkit.getScheduler().runTaskLaterAsynchronously(this.plugin, this::connect, RECONNECT_DELAY_TICKS);
             return false;
         }
+    }
+
+    /**
+     * Listens for what the other shards announce has changed.
+     *
+     * <p>An exclusive, auto-deleting queue of our own bound to the fanout. Exclusive is allowed where
+     * the request queues could not be, because this one belongs to this connection and goes away with
+     * it - which is what we want, since an announcement held for a server that is not running would
+     * arrive after that server had already re-read the chunk.</p>
+     */
+    private void consumeUpdates() throws IOException {
+        this.channel.exchangeDeclare(ShardsRabbitMqTopology.MIRROR_UPDATE_EXCHANGE, "fanout", false);
+        final String queue = this.channel.queueDeclare().getQueue();
+        this.channel.queueBind(queue, ShardsRabbitMqTopology.MIRROR_UPDATE_EXCHANGE, "");
+        this.channel.basicConsume(queue, true, (consumerTag, delivery) -> {
+            try {
+                final ChunkUpdateMessage update = GSON.fromJson(
+                    new String(delivery.getBody(), StandardCharsets.UTF_8), ChunkUpdateMessage.class);
+                if (update != null && !update.serverName().equals(this.serverName)) {
+                    // Our own announcements come back to us, because a fanout goes to everybody
+                    this.updates.accept(update);
+                }
+            } catch (final RuntimeException exception) {
+                this.logger.log(Level.FINE, "Dropping a malformed mirror update", exception);
+            }
+        }, consumerTag -> {
+        });
     }
 
     private void handleDelivery(final byte[] body, final AMQP.BasicProperties properties, final long deliveryTag)
