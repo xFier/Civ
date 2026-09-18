@@ -7,6 +7,8 @@ import com.github.retrooper.packetevents.protocol.player.UserProfile;
 import com.github.retrooper.packetevents.util.Vector3d;
 import com.github.retrooper.packetevents.wrapper.PacketWrapper;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerDestroyEntities;
+import com.github.retrooper.packetevents.protocol.player.Equipment;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityEquipment;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityHeadLook;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityTeleport;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerPlayerInfoUpdate;
@@ -44,12 +46,18 @@ import org.bukkit.event.player.PlayerQuitEvent;
  * something not really here: two counters both starting at the top of the range would hand the same
  * ids to both, a collision between two things each carefully avoiding one with the server.</p>
  *
- * <p><strong>No entity metadata is sent, and that is not an oversight.</strong> The obvious thing to
- * send is which skin layers to draw - without it the outer layer, the hat and jacket, is missing. It
- * was sent at field 17, which is what that field used to be; on this version 17 is a float and the
- * client refuses the packet and drops the connection outright. A cosmetic packet took every player
- * on both shards offline. Metadata goes back in when the right index is read off a real player rather
- * than inferred, and until then a mirrored player has a plain skin, no armour and no pose.</p>
+ * <p>What they are wearing and holding is drawn, because <strong>equipment is not metadata</strong>:
+ * it is sent with its slot named rather than as a numbered field, so there is nothing to read off a
+ * real player and nothing to guess. Sent when a ghost is first drawn and again whenever it changes,
+ * which is what keeps it off the wire for somebody who is only walking.</p>
+ *
+ * <p><strong>No entity metadata is sent, and that is not an oversight.</strong> What is left in it is
+ * which skin layers to draw - without it the outer layer, the hat and jacket, is missing - and the
+ * pose. It was sent at field 17, which is what that field used to be; on this version 17 is a float
+ * and the client refuses the packet and drops the connection outright. A cosmetic packet took every
+ * player on both shards offline. Metadata goes back in when the right index is read off a real player
+ * rather than inferred, and until then a mirrored player has a plain skin and stands upright however
+ * they are really moving.</p>
  */
 public final class MirrorPlayerView implements Listener, MirrorPlayers {
 
@@ -132,11 +140,18 @@ public final class MirrorPlayerView implements Listener, MirrorPlayers {
             new Vector3d(subject.x(), subject.y(), subject.z()), subject.yaw(), subject.pitch(),
             subject.onGround()));
         send(viewer, new WrapperPlayServerEntityHeadLook(existing.entityId(), subject.headYaw()));
+        if (!existing.equipment().equals(subject.equipment())) {
+            // Only what they have taken off or picked up. These messages carry the whole of it every
+            // tick so that nothing can be missed; sending the whole of it every tick is what would be
+            // wasteful
+            dress(viewer, existing.entityId(), existing.equipment(), subject.equipment());
+            theirs.put(subject.uuid(), new Ghost(existing.entityId(), subject.equipment()));
+        }
     }
 
     private void spawn(final Player viewer, final Map<UUID, Ghost> theirs, final MirrorPlayer subject) {
         final int entityId = FakeEntityIds.next();
-        theirs.put(subject.uuid(), new Ghost(entityId));
+        theirs.put(subject.uuid(), new Ghost(entityId, subject.equipment()));
 
         // The profile is what gives them their skin and their name tag. Sent even though the proxy
         // already puts cross-shard players in the tab list, so this does not quietly break the day
@@ -155,6 +170,19 @@ public final class MirrorPlayerView implements Listener, MirrorPlayers {
             EntityTypes.PLAYER, new Vector3d(subject.x(), subject.y(), subject.z()), subject.pitch(),
             subject.yaw(), subject.headYaw(), 0, Optional.empty()));
         send(viewer, new WrapperPlayServerEntityHeadLook(entityId, subject.headYaw()));
+        dress(viewer, entityId, Map.of(), subject.equipment());
+    }
+
+    /**
+     * Puts their armour on and their tools in their hands.
+     */
+    private void dress(final Player viewer, final int entityId, final Map<String, String> was,
+                       final Map<String, String> now) {
+        final List<Equipment> worn = MirrorEquipment.of(was, now);
+        if (worn.isEmpty()) {
+            return;
+        }
+        send(viewer, new WrapperPlayServerEntityEquipment(entityId, worn));
     }
 
     /**
@@ -218,6 +246,9 @@ public final class MirrorPlayerView implements Listener, MirrorPlayers {
         }
     }
 
-    private record Ghost(int entityId) {
+    /**
+     * @param equipment what this ghost was last drawn wearing, so a packet goes only when it changes
+     */
+    private record Ghost(int entityId, Map<String, String> equipment) {
     }
 }
