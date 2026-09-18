@@ -31,6 +31,7 @@ import net.civmc.shards.paper.mirror.MirrorPlayerPublisher;
 import net.civmc.shards.paper.mirror.MirrorPlayerView;
 import net.civmc.shards.paper.mirror.MirrorPlayers;
 import net.civmc.shards.paper.mirror.MirrorRepairListener;
+import net.civmc.shards.paper.mirror.MirrorSignPublisher;
 import net.civmc.shards.paper.mirror.MirrorStore;
 import net.civmc.shards.paper.mirror.MirrorUpdatePublisher;
 import net.civmc.shards.paper.mirror.MirrorView;
@@ -288,6 +289,13 @@ public final class ShardsPaperPlugin extends JavaPlugin {
             this.config.serverName(), revisions);
         getServer().getPluginManager().registerEvents(entityPublisher, this);
         getServer().getScheduler().runTaskTimer(this, entityPublisher::flush, 1L, 1L);
+
+        // And what this shard's signs say, on the same count again. A sign is a block and arrives as
+        // one, but what is written on it is not part of the block and nothing else would carry it
+        final MirrorSignPublisher signPublisher = new MirrorSignPublisher(this, this.border, this.client,
+            this.config.serverName(), revisions);
+        getServer().getPluginManager().registerEvents(signPublisher, this);
+        getServer().getScheduler().runTaskTimer(this, signPublisher::flush, 1L, 1L);
 
         // Where this shard's players are, every tick, for the shards that can see that ground. Sent
         // whether or not this server can show anybody: a neighbour may be able to even if we cannot
