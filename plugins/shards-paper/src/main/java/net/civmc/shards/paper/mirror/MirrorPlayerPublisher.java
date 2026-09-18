@@ -1,5 +1,7 @@
 package net.civmc.shards.paper.mirror;
 
+import com.destroystokyo.paper.ClientOption;
+import com.destroystokyo.paper.SkinParts;
 import com.destroystokyo.paper.profile.ProfileProperty;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -42,6 +44,8 @@ public final class MirrorPlayerPublisher {
     // Everything a player can be seen wearing or holding. Read by name, so a slot this version does
     // not have simply is not in the list
     private static final EquipmentSlot[] SLOTS = EquipmentSlot.values();
+    // Every layer switched on, for a client that has not said yet
+    private static final int ALL_SKIN_PARTS = 0x7F;
 
     private final ShardBorder border;
     private final ShardsClient client;
@@ -95,7 +99,19 @@ public final class MirrorPlayerPublisher {
         return new MirrorPlayer(player.getUniqueId(), player.getName(), texture, signature,
             at.getX(), at.getY(), at.getZ(), at.getYaw(), at.getPitch(), player.getEyeLocation().getYaw(),
             player.isSneaking(), player.isSwimming(), player.isGliding(), player.isOnGround(),
-            worn(player));
+            worn(player), skinParts(player));
+    }
+
+    /**
+     * Which skin layers this person has switched on, as their own client told this server.
+     *
+     * <p>Theirs to decide, which is why it is carried rather than assumed. A client that has not said
+     * - one that has only just connected - counts as everything on, because a missing hat is the
+     * thing anybody would notice and every layer on is what almost everybody plays with.</p>
+     */
+    private static int skinParts(final Player player) {
+        final SkinParts parts = player.getClientOption(ClientOption.SKIN_PARTS);
+        return parts == null ? ALL_SKIN_PARTS : parts.getRaw();
     }
 
     /**

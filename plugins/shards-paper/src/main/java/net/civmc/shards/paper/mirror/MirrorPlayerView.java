@@ -7,9 +7,12 @@ import com.github.retrooper.packetevents.protocol.player.UserProfile;
 import com.github.retrooper.packetevents.util.Vector3d;
 import com.github.retrooper.packetevents.wrapper.PacketWrapper;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerDestroyEntities;
+import com.github.retrooper.packetevents.protocol.entity.data.EntityData;
+import com.github.retrooper.packetevents.protocol.entity.pose.EntityPose;
 import com.github.retrooper.packetevents.protocol.player.Equipment;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityEquipment;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityHeadLook;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityMetadata;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityTeleport;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerPlayerInfoUpdate;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSpawnEntity;
@@ -51,13 +54,12 @@ import org.bukkit.event.player.PlayerQuitEvent;
  * real player and nothing to guess. Sent when a ghost is first drawn and again whenever it changes,
  * which is what keeps it off the wire for somebody who is only walking.</p>
  *
- * <p><strong>No entity metadata is sent, and that is not an oversight.</strong> What is left in it is
- * which skin layers to draw - without it the outer layer, the hat and jacket, is missing - and the
- * pose. It was sent at field 17, which is what that field used to be; on this version 17 is a float
- * and the client refuses the packet and drops the connection outright. A cosmetic packet took every
- * player on both shards offline. Metadata goes back in when the right index is read off a real player
- * rather than inferred, and until then a mirrored player has a plain skin and stands upright however
- * they are really moving.</p>
+ * <p><strong>Metadata is sent again, and only at a number the server itself declared.</strong> Which
+ * layers of a skin to draw - the hat and the jacket - and what the person is doing with themselves, so
+ * somebody sneaking along a border is sneaking on the other side of it too. This is the packet that
+ * once took every player on both shards offline, sent at field 17 because that is what 17 used to be.
+ * Where the number comes from now is {@link ServerFieldNumbers}, and where the server will not say,
+ * none of it is sent and a mirrored player has a plain skin and stands upright.</p>
  */
 public final class MirrorPlayerView implements Listener, MirrorPlayers {
 
@@ -69,10 +71,19 @@ public final class MirrorPlayerView implements Listener, MirrorPlayers {
     // around in it
     private static final long FORGET_AFTER_NANOS = TimeUnit.SECONDS.toNanos(3L);
 
+    private final LearnedEntityDataLayout layout;
+
     // viewer -> the players they are being shown, and under what id
     private final Map<UUID, Map<UUID, Ghost>> ghosts = new ConcurrentHashMap<>();
     // Everyone recently announced, so one that stops being mentioned can be taken away
     private final Map<UUID, Long> lastHeardOf = new ConcurrentHashMap<>();
+
+    /**
+     * @param layout where a metadata field number comes from, or null when nothing here can say
+     */
+    public MirrorPlayerView(final LearnedEntityDataLayout layout) {
+        this.layout = layout;
+    }
 
     /**
      * Applies one announcement. Main thread.
@@ -140,18 +151,25 @@ public final class MirrorPlayerView implements Listener, MirrorPlayers {
             new Vector3d(subject.x(), subject.y(), subject.z()), subject.yaw(), subject.pitch(),
             subject.onGround()));
         send(viewer, new WrapperPlayServerEntityHeadLook(existing.entityId(), subject.headYaw()));
+        if (existing.skinParts() != subject.skinParts() || existing.pose() != poseOf(subject)) {
+            describe(viewer, existing.entityId(), subject);
+            theirs.put(subject.uuid(), new Ghost(existing.entityId(), existing.equipment(),
+                subject.skinParts(), poseOf(subject)));
+        }
         if (!existing.equipment().equals(subject.equipment())) {
             // Only what they have taken off or picked up. These messages carry the whole of it every
             // tick so that nothing can be missed; sending the whole of it every tick is what would be
             // wasteful
             dress(viewer, existing.entityId(), existing.equipment(), subject.equipment());
-            theirs.put(subject.uuid(), new Ghost(existing.entityId(), subject.equipment()));
+            theirs.put(subject.uuid(), new Ghost(existing.entityId(), subject.equipment(),
+                subject.skinParts(), poseOf(subject)));
         }
     }
 
     private void spawn(final Player viewer, final Map<UUID, Ghost> theirs, final MirrorPlayer subject) {
         final int entityId = FakeEntityIds.next();
-        theirs.put(subject.uuid(), new Ghost(entityId, subject.equipment()));
+        theirs.put(subject.uuid(), new Ghost(entityId, subject.equipment(), subject.skinParts(),
+            poseOf(subject)));
 
         // The profile is what gives them their skin and their name tag. Sent even though the proxy
         // already puts cross-shard players in the tab list, so this does not quietly break the day
@@ -171,6 +189,43 @@ public final class MirrorPlayerView implements Listener, MirrorPlayers {
             subject.yaw(), subject.headYaw(), 0, Optional.empty()));
         send(viewer, new WrapperPlayServerEntityHeadLook(entityId, subject.headYaw()));
         dress(viewer, entityId, Map.of(), subject.equipment());
+        describe(viewer, entityId, subject);
+    }
+
+    /**
+     * Sends the two things about a person that are numbered fields rather than packets of their own:
+     * which layers of their skin to draw, and what they are doing with themselves.
+     *
+     * <p>Both in one packet, and only the ones the server would say where to put. A field nobody can
+     * give a number for is left out rather than filled in, which is the whole lesson of this class.</p>
+     */
+    private void describe(final Player viewer, final int entityId, final MirrorPlayer subject) {
+        if (this.layout == null) {
+            return;
+        }
+        final List<EntityData<?>> described = new ArrayList<>(2);
+        this.layout.skinLayers((byte) subject.skinParts()).ifPresent(described::add);
+        this.layout.pose(poseOf(subject)).ifPresent(described::add);
+        if (!described.isEmpty()) {
+            send(viewer, new WrapperPlayServerEntityMetadata(entityId, described));
+        }
+    }
+
+    /**
+     * What they are doing with themselves, in the order the game itself settles them: gliding beats
+     * swimming, and swimming beats a crouch.
+     */
+    private static EntityPose poseOf(final MirrorPlayer subject) {
+        if (subject.gliding()) {
+            return EntityPose.FALL_FLYING;
+        }
+        if (subject.swimming()) {
+            return EntityPose.SWIMMING;
+        }
+        if (subject.sneaking()) {
+            return EntityPose.CROUCHING;
+        }
+        return EntityPose.STANDING;
     }
 
     /**
@@ -248,7 +303,9 @@ public final class MirrorPlayerView implements Listener, MirrorPlayers {
 
     /**
      * @param equipment what this ghost was last drawn wearing, so a packet goes only when it changes
+     * @param skinParts the layers it was last drawn with, for the same reason
+     * @param pose what it was last drawn doing, for the same reason
      */
-    private record Ghost(int entityId, Map<String, String> equipment) {
+    private record Ghost(int entityId, Map<String, String> equipment, int skinParts, EntityPose pose) {
     }
 }
