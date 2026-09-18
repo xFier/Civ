@@ -121,6 +121,7 @@ public final class ShardBorderListener implements Listener {
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onVehicleMove(final VehicleMoveEvent event) {
         if (!this.border.isOutside(event.getTo())) {
+            handOverBeforeTheTrackRunsOut(event);
             return;
         }
         boolean carryingSomebody = false;
@@ -137,6 +138,48 @@ public final class ShardBorderListener implements Listener {
             return;
         }
         stopAtTheBorder(event.getVehicle(), event.getFrom());
+    }
+
+    /**
+     * Hands over a rider one block before the border, because a minecart cannot reach it.
+     *
+     * <p>Everything else crosses by arriving on the far side and being caught there: a player walks
+     * over the line, a boat floats over it, a horse steps over it. <strong>A minecart cannot.</strong>
+     * The rail it runs on is a block, and a block past the border belongs to the neighbour - it is
+     * drawn here and is not here, and placing one is refused, so the track can never really continue
+     * on this side. The cart reaches the last rail, comes off the end and stops, and the move that
+     * would have been refused and turned into a handover never happens. Riding a minecart to another
+     * shard was simply impossible.</p>
+     *
+     * <p>So a vehicle carrying somebody is handed over from the last block <em>inside</em>, looking
+     * one block along the way it is already travelling. Only on the move that takes it into a new
+     * block, so this is about a vehicle that is going somewhere rather than one rocking on the spot,
+     * and the direction is taken from the move itself rather than from velocity, which is where the
+     * cart wants to go rather than where it is going.</p>
+     *
+     * <p>The rider arrives at that next block, which is the first one the neighbour owns, and their
+     * vehicle is rebuilt around them there as it is for any other crossing. Its speed does not go with
+     * it - a rebuilt cart starts still - and it is left that way rather than guessed at.</p>
+     */
+    private void handOverBeforeTheTrackRunsOut(final VehicleMoveEvent event) {
+        final Location to = event.getTo();
+        final Location from = event.getFrom();
+        if (to.getBlockX() == from.getBlockX() && to.getBlockZ() == from.getBlockZ()) {
+            return;
+        }
+        if (event.getVehicle().getPassengers().isEmpty()) {
+            return;
+        }
+        final Location next = to.clone().add(Integer.signum(to.getBlockX() - from.getBlockX()), 0,
+            Integer.signum(to.getBlockZ() - from.getBlockZ()));
+        if (!this.border.isOutside(next)) {
+            return;
+        }
+        for (final Entity passenger : event.getVehicle().getPassengers()) {
+            if (passenger instanceof Player player) {
+                this.transfers.transferTo(player, next);
+            }
+        }
     }
 
     /**
