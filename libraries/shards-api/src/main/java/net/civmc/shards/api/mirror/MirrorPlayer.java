@@ -26,11 +26,14 @@ import java.util.UUID;
  *     head, and without it everybody looks like they are strafing
  * @param equipment what they are wearing and holding, by {@code EquipmentSlot} name, each one Base64
  *     of the server's own item bytes - the same form a frame's item travels in
+ * @param skinParts which layers of their skin the person themselves has switched on - the hat, the
+ *     jacket, the sleeves - as the client's own settings byte. Their choice rather than anything this
+ *     server decides, so it is read from them and carried, not worked out on the far side
  */
 public record MirrorPlayer(UUID uuid, String name, String skinTexture, String skinSignature,
                            double x, double y, double z, float yaw, float pitch, float headYaw,
                            boolean sneaking, boolean swimming, boolean gliding, boolean onGround,
-                           Map<String, String> equipment) {
+                           Map<String, String> equipment, int skinParts) {
 
     public MirrorPlayer {
         Objects.requireNonNull(uuid, "uuid");

@@ -253,8 +253,9 @@ public final class ShardsPaperPlugin extends JavaPlugin {
         // Shared by the two halves that have to agree on one count: the publisher that numbers an
         // announcement, and the provider that says which number a snapshot was taken at
         final ChunkRevisions revisions = new ChunkRevisions();
-        final MirrorPlayers players = startPlayerMirror();
+        // Before the players, who are now drawn with two numbered fields of their own
         this.entityDataLayout = startEntityDataLayout();
+        final MirrorPlayers players = startPlayerMirror();
         // As far as the client renders, which is what has to look right. The neighbour's own view
         // distance does not come into it - it is this server's players who are looking
         final MirrorView mirror = new MirrorView(this, this.border, outlook, this.client,
@@ -326,10 +327,9 @@ public final class ShardsPaperPlugin extends JavaPlugin {
     /**
      * Starts reading metadata field numbers off this server's own entities.
      *
-     * <p>Nothing sends metadata yet - a mirrored player still has a plain skin and no pose. This is the
-     * half that has to come first, because the rule after a guessed field number took every player on
-     * both shards offline was that an index is read off a real entity or not sent at all, and until
-     * something is doing the reading there is nothing to send.</p>
+     * <p>The second place a field number is looked for, behind the class the server declares it on.
+     * It stays for the reason it was written: it needs nothing of the server's internals, so it is
+     * what answers on a server this was not written against.</p>
      *
      * <p>Behind the same guard as the rest of the packet work, for the same reason: a soft dependency
      * that takes the plugin down when it is missing is not soft.</p>
@@ -389,7 +389,8 @@ public final class ShardsPaperPlugin extends JavaPlugin {
             return MirrorPlayers.NONE;
         }
         try {
-            final MirrorPlayerView view = new MirrorPlayerView();
+            final MirrorPlayerView view = new MirrorPlayerView(
+                this.entityDataLayout instanceof LearnedEntityDataLayout learned ? learned : null);
             getServer().getPluginManager().registerEvents(view, this);
             return view;
         } catch (final RuntimeException | LinkageError exception) {
