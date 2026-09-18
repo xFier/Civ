@@ -26,6 +26,7 @@ import net.civmc.shards.api.mirror.ChunkSectionState;
 import net.civmc.shards.api.mirror.ChunkState;
 import net.civmc.shards.api.mirror.ChunkStateCodec;
 import net.civmc.shards.api.mirror.MirroredEntity;
+import net.civmc.shards.api.mirror.MirroredSign;
 import net.civmc.shards.api.region.ShardPoint;
 import net.civmc.shards.paper.border.BorderOutlook;
 import net.civmc.shards.paper.border.ShardBorder;
@@ -180,6 +181,9 @@ public final class MirrorView implements Listener {
         if (!current.send().isEmpty()) {
             viewer.sendMultiBlockChange(current.send());
         }
+        // What the boards say, after the boards themselves: this changes what a sign says and not
+        // what is there, so it has nothing to write on until the blocks have arrived
+        Signs.draw(viewer, current.signs());
         // The contents of a build rather than its walls. After the blocks, so a frame is never hung in
         // front of a wall that has not arrived yet
         this.entities.show(viewer, key.world(), key.x(), key.z(), current.entities());
@@ -229,8 +233,9 @@ public final class MirrorView implements Listener {
             final String publisherId = response.publisherId();
             final long revision = response.revision();
             final List<MirroredEntity> entities = response.entities();
+            final List<MirroredSign> signs = response.signs();
             diff(key, state).whenComplete((blocks, failure) -> Bukkit.getScheduler().runTask(this.plugin,
-                () -> installed(key, blocks, failure, publisherId, revision, entities)));
+                () -> installed(key, blocks, failure, publisherId, revision, entities, signs)));
         } catch (final RuntimeException unreadable) {
             this.logger.log(Level.WARNING, "Could not read " + key + " as its owner sent it", unreadable);
             this.inFlight.remove(key);
@@ -243,13 +248,13 @@ public final class MirrorView implements Listener {
      */
     private void installed(final ChunkKey key, final Map<Position, BlockData> blocks,
                            final Throwable failure, final String publisherId, final long revision,
-                           final List<MirroredEntity> entities) {
+                           final List<MirroredEntity> entities, final List<MirroredSign> signs) {
         try {
             if (failure != null) {
                 this.logger.log(Level.FINE, "Could not compare " + key + " with our own copy", failure);
                 return;
             }
-            install(key, blocks, publisherId, revision, entities);
+            install(key, blocks, publisherId, revision, entities, signs);
         } finally {
             this.inFlight.remove(key);
         }
@@ -267,7 +272,7 @@ public final class MirrorView implements Listener {
      */
     private void install(final ChunkKey key, final Map<Position, BlockData> blocks,
                          final String publisherId, final long revision,
-                         final List<MirroredEntity> entities) {
+                         final List<MirroredEntity> entities, final List<MirroredSign> signs) {
         final Mirrored previous = this.mirrored.get(key);
         // Announced while this was being read, so of the two pictures this is the older one
         final boolean overtaken = this.changedWhileFetching.remove(key);
@@ -289,9 +294,9 @@ public final class MirrorView implements Listener {
             }
         }
         this.mirrored.put(key, new Mirrored(blocks, send, System.nanoTime(), overtaken, publisherId,
-            revision, entities));
+            revision, entities, signs));
         if (previous != null && previous.blocks().equals(blocks)
-            && previous.entities().equals(entities)) {
+            && previous.entities().equals(entities) && previous.signs().equals(signs)) {
             // Nothing has changed over there, so nobody needs telling again
             return;
         }
@@ -450,6 +455,9 @@ public final class MirrorView implements Listener {
         final List<MirroredEntity> entities = update.entitiesDescribed()
             ? update.entities()
             : current.entities();
+        // The same rule for the signs: an announcement that says nothing about them is not an
+        // announcement that there are none
+        final List<MirroredSign> signs = update.signsDescribed() ? update.signs() : current.signs();
         final Map<Position, BlockData> blocks = new HashMap<>(current.blocks());
         final Map<Position, BlockData> send = new HashMap<>();
         for (final BlockUpdate block : update.updates()) {
@@ -468,9 +476,10 @@ public final class MirrorView implements Listener {
         }
         // Keeps the fetch time, because nothing has been re-read - only corrected
         this.mirrored.put(key, new Mirrored(blocks, blocks, current.fetchedAtNanos(),
-            current.stale() || missedOne, update.publisherId(), update.revision(), entities));
+            current.stale() || missedOne, update.publisherId(), update.revision(), entities, signs));
         final boolean entitiesChanged = update.entitiesDescribed()
             && !current.entities().equals(entities);
+        final boolean signsChanged = update.signsDescribed() && !current.signs().equals(signs);
         for (final Player viewer : Bukkit.getOnlinePlayers()) {
             final Set<ChunkKey> alreadyShown = this.shown.get(viewer.getUniqueId());
             if (alreadyShown == null || !alreadyShown.contains(key)) {
@@ -478,6 +487,11 @@ public final class MirrorView implements Listener {
             }
             if (!send.isEmpty()) {
                 viewer.sendMultiBlockChange(send);
+            }
+            if (signsChanged) {
+                // All of them rather than the one that changed: the message carries the whole chunk's
+                // worth, and writing a sign with what it already says costs the client nothing
+                Signs.draw(viewer, signs);
             }
             if (entitiesChanged) {
                 // Told the whole list rather than what moved: the drawing side works out for itself
@@ -571,12 +585,12 @@ public final class MirrorView implements Listener {
             this.lastNearby.put(new ChunkKey(chunk.world(), chunk.x(), chunk.z()), System.nanoTime());
             // Nothing has been shown to anybody yet, so there is nothing to put back to our own copy
             // and send is simply the difference
-            // No entities: what is saved is the difference in blocks, and a frame is not a block. A
-            // restored chunk draws its walls at once and its contents when it is read again, which is
-            // the first time anybody looks at it
+            // No entities and no signs: what is saved is the difference in blocks, and neither a
+            // frame nor what a board says is a block. A restored chunk draws its walls at once and
+            // what is on them when it is read again, which is the first time anybody looks at it
             this.mirrored.put(new ChunkKey(chunk.world(), chunk.x(), chunk.z()),
                 new Mirrored(blocks, blocks, System.nanoTime(), true, chunk.publisherId(),
-                    chunk.revision(), List.of()));
+                    chunk.revision(), List.of(), List.of()));
         }
         if (unknownBlocks > 0) {
             this.logger.warning("Dropped " + unknownBlocks + " saved mirror block(s) the game no longer "
@@ -672,14 +686,15 @@ public final class MirrorView implements Listener {
      *     {@link ChunkRevisions}
      * @param entities the owner's frames and stands in this chunk, drawn rather than sent as blocks
      *     because they are not blocks
+     * @param signs what the owner's signs in this chunk say, which is not part of the block a sign is
      */
     private record Mirrored(Map<Position, BlockData> blocks, Map<Position, BlockData> send,
                             long fetchedAtNanos, boolean stale, String publisherId, long revision,
-                            List<MirroredEntity> entities) {
+                            List<MirroredEntity> entities, List<MirroredSign> signs) {
 
         Mirrored readAgain() {
             return new Mirrored(this.blocks(), this.send(), this.fetchedAtNanos(), true,
-                this.publisherId(), this.revision(), this.entities());
+                this.publisherId(), this.revision(), this.entities(), this.signs());
         }
     }
 }

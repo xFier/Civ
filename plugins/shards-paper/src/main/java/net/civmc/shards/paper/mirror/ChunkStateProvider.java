@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import net.civmc.shards.api.mirror.ChunkSectionState;
 import net.civmc.shards.api.mirror.MirroredEntity;
+import net.civmc.shards.api.mirror.MirroredSign;
 import net.civmc.shards.api.mirror.ChunkState;
 import net.civmc.shards.paper.border.ShardBorder;
 import org.bukkit.Bukkit;
@@ -40,14 +41,15 @@ public final class ChunkStateProvider {
      * @param buildNanos turning the snapshot into sections. Real work, off the main thread
      */
     public record ChunkRead(ChunkState state, long waitNanos, long buildNanos, String publisherId,
-                            long revision, List<MirroredEntity> entities) {
+                            long revision, List<MirroredEntity> entities, List<MirroredSign> signs) {
     }
 
     /**
      * A snapshot and the announcement number in force when it was taken, read together on the main
      * thread so nothing can be announced between the two. See {@link ChunkRevisions}.
      */
-    private record Taken(ChunkSnapshot snapshot, long revision, List<MirroredEntity> entities) {
+    private record Taken(ChunkSnapshot snapshot, long revision, List<MirroredEntity> entities,
+                         List<MirroredSign> signs) {
     }
 
     /**
@@ -73,13 +75,13 @@ public final class ChunkStateProvider {
             // announcement number is read here too, because taken anywhere else it could be a number
             // either side of this snapshot rather than the one that matches it
             .thenApply(chunk -> new Taken(chunk.getChunkSnapshot(), this.revisions.current(key),
-                StillEntities.in(chunk)))
+                StillEntities.in(chunk), Signs.in(chunk)))
             .thenApplyAsync(taken -> {
                 final long snapshotAt = System.nanoTime();
                 final ChunkState state = toState(taken.snapshot(), world.getMinHeight(),
                     world.getMaxHeight());
                 return new ChunkRead(state, snapshotAt - askedAt, System.nanoTime() - snapshotAt,
-                    this.revisions.publisherId(), taken.revision(), taken.entities());
+                    this.revisions.publisherId(), taken.revision(), taken.entities(), taken.signs());
             });
     }
 
