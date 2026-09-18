@@ -66,13 +66,16 @@ public final class StillEntities {
     }
 
     /**
-     * What a stand is wearing, by slot name.
+     * What a living entity is wearing and holding, by slot name.
      *
      * <p>By name rather than by position, because equipment is one of the few things about an entity
      * that is not a numbered field on the wire - it is sent with the slot named - so nothing here has
      * to be learned or guessed, unlike the item in a frame.</p>
+     *
+     * <p>Shared with the mirrored players rather than written twice: a stand wearing a helmet and a
+     * player wearing one are the same description and the same packet on the far side.</p>
      */
-    private static Map<String, String> worn(final LivingEntity stand) {
+    static Map<String, String> worn(final LivingEntity stand) {
         final EntityEquipment equipment = stand.getEquipment();
         if (equipment == null) {
             return Map.of();
@@ -104,7 +107,7 @@ public final class StillEntities {
      * would draw the right block and the wrong thing. Both shards run the same version - they are one
      * network - so the same reader is on both ends of this.</p>
      */
-    private static String encode(final ItemStack item) {
+    static String encode(final ItemStack item) {
         if (item == null || item.getType().isAir()) {
             return "";
         }

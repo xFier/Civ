@@ -4,7 +4,6 @@ import com.github.retrooper.packetevents.PacketEvents;
 import com.github.retrooper.packetevents.protocol.entity.data.EntityData;
 import com.github.retrooper.packetevents.protocol.entity.type.EntityTypes;
 import com.github.retrooper.packetevents.protocol.player.Equipment;
-import com.github.retrooper.packetevents.protocol.player.EquipmentSlot;
 import com.github.retrooper.packetevents.util.Vector3d;
 import com.github.retrooper.packetevents.wrapper.PacketWrapper;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerDestroyEntities;
@@ -13,7 +12,6 @@ import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEn
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSpawnEntity;
 import io.github.retrooper.packetevents.util.SpigotConversionUtil;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -88,7 +86,7 @@ public final class MirrorEntityView implements MirrorEntities {
                 stillThere.put(entity.id(), draw(viewer, entity));
                 continue;
             }
-            dress(viewer, already.entityId(), entity);
+            dress(viewer, already.entityId(), already.as(), entity);
             stillThere.put(entity.id(), new Drawn(already.entityId(), entity));
         }
         for (final Map.Entry<UUID, Drawn> was : here.entrySet()) {
@@ -114,34 +112,30 @@ public final class MirrorEntityView implements MirrorEntities {
             Optional.of(UUID.randomUUID()), typeOf(entity),
             new Vector3d(entity.x(), entity.y(), entity.z()), entity.pitch(), entity.yaw(), entity.yaw(),
             facingOf(entity.facing()), Optional.empty()));
-        dress(viewer, entityId, entity);
+        dress(viewer, entityId, null, entity);
         return new Drawn(entityId, entity);
     }
 
     /**
      * Puts the item in the frame and the armour on the stand.
      */
-    private void dress(final Player viewer, final int entityId, final MirroredEntity entity) {
-        if (!entity.item().isEmpty()) {
-            final ItemStack item = decode(entity.item());
-            final Optional<EntityData<?>> data = item == null
-                ? Optional.empty()
-                : this.layout.itemData(bukkitTypeOf(entity), SpigotConversionUtil.fromBukkitItemStack(item));
+    private void dress(final Player viewer, final int entityId, final MirroredEntity was,
+                       final MirroredEntity entity) {
+        if (was == null || !was.item().equals(entity.item())) {
+            final ItemStack item = entity.item().isEmpty() ? null : MirrorEquipment.decode(entity.item());
+            // An empty frame is sent as an empty stack rather than not sent at all, or an item taken
+            // out over there goes on being shown here until the chunk is next read. An item this
+            // server cannot read goes the same way, for the same reason
+            final Optional<EntityData<?>> data = this.layout.itemData(bukkitTypeOf(entity),
+                item == null
+                    ? com.github.retrooper.packetevents.protocol.item.ItemStack.EMPTY
+                    : SpigotConversionUtil.fromBukkitItemStack(item));
             // Empty means the field number has not been read off a real entity yet. The frame is drawn
             // empty rather than with a guess: a guessed field number is what took the network offline
             data.ifPresent(one -> send(viewer, new WrapperPlayServerEntityMetadata(entityId, List.of(one))));
         }
-        if (entity.equipment().isEmpty()) {
-            return;
-        }
-        final List<Equipment> worn = new ArrayList<>();
-        for (final Map.Entry<String, String> slot : entity.equipment().entrySet()) {
-            final EquipmentSlot where = slotOf(slot.getKey());
-            final ItemStack item = decode(slot.getValue());
-            if (where != null && item != null) {
-                worn.add(new Equipment(where, SpigotConversionUtil.fromBukkitItemStack(item)));
-            }
-        }
+        final List<Equipment> worn = MirrorEquipment.of(
+            was == null ? Map.of() : was.equipment(), entity.equipment());
         if (!worn.isEmpty()) {
             send(viewer, new WrapperPlayServerEntityEquipment(entityId, worn));
         }
@@ -223,34 +217,6 @@ public final class MirrorEntityView implements MirrorEntities {
             case "EAST" -> 5;
             default -> BlockFace.NORTH.ordinal();
         };
-    }
-
-    /**
-     * The same slot under the packet library's name for it. Named rather than numbered, which is why
-     * equipment needs nothing learned - and why a slot this version does not have is skipped instead
-     * of being sent as something else.
-     */
-    private static EquipmentSlot slotOf(final String bukkitSlot) {
-        return switch (bukkitSlot) {
-            case "HAND" -> EquipmentSlot.MAIN_HAND;
-            case "OFF_HAND" -> EquipmentSlot.OFF_HAND;
-            case "FEET" -> EquipmentSlot.BOOTS;
-            case "LEGS" -> EquipmentSlot.LEGGINGS;
-            case "CHEST" -> EquipmentSlot.CHEST_PLATE;
-            case "HEAD" -> EquipmentSlot.HELMET;
-            case "BODY" -> EquipmentSlot.BODY;
-            case "SADDLE" -> EquipmentSlot.SADDLE;
-            default -> null;
-        };
-    }
-
-    private static ItemStack decode(final String encoded) {
-        try {
-            return ItemStack.deserializeBytes(Base64.getDecoder().decode(encoded));
-        } catch (final RuntimeException unreadable) {
-            // One item a shard could describe and this one cannot read is not worth the frame it is in
-            return null;
-        }
     }
 
     private static String key(final String world, final int chunkX, final int chunkZ) {
