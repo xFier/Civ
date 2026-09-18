@@ -1,5 +1,7 @@
 package net.civmc.shards.paper.mirror;
 
+import io.papermc.paper.event.packet.PlayerChunkLoadEvent;
+import io.papermc.paper.event.packet.PlayerChunkUnloadEvent;
 import io.papermc.paper.math.Position;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -160,6 +162,14 @@ public final class MirrorView implements Listener {
             fetch(key, foreignBlock, askingWhoOwns);
         }
         if (current == null) {
+            return;
+        }
+        // Not until their client has the chunk. A block change for a chunk the client has not been
+        // sent is dropped on the floor - and this would have recorded it as shown, so the picture
+        // would not be sent again until they walked out of range and back. That is the whole reason
+        // the far side used to stay untouched terrain until somebody hit a block: being refused
+        // draws it again, which is a repair standing in for the first draw
+        if (!viewer.isChunkSent(Chunk.getChunkKey(key.x(), key.z()))) {
             return;
         }
         final Set<ChunkKey> alreadyShown = this.shown.computeIfAbsent(viewer.getUniqueId(),
@@ -601,6 +611,44 @@ public final class MirrorView implements Listener {
                 savedBlocks));
         }
         return saved;
+    }
+
+    /**
+     * Draws the mirror again whenever the server sends a player a chunk.
+     *
+     * <p>A chunk packet is the whole chunk as <em>this</em> server has it, so it rubs out every
+     * mirrored block in it - the same way a refused placement does, and for the same reason. It
+     * happens on the walk towards a border, when the server re-sends a chunk after a light update,
+     * and every time a player rejoins.</p>
+     *
+     * <p>Their fake frames and stands go with it: a client drops the entities in a chunk it is given
+     * again, so what was drawn there is gone from their screen and has to be spawned rather than
+     * corrected.</p>
+     */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onChunkSent(final PlayerChunkLoadEvent event) {
+        drawAgain(event.getPlayer(), event.getWorld().getName(), event.getChunk().getX(),
+            event.getChunk().getZ());
+    }
+
+    /**
+     * The same when a client throws a chunk away, so that coming back to it draws it rather than
+     * finding it already shown.
+     */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onChunkDropped(final PlayerChunkUnloadEvent event) {
+        drawAgain(event.getPlayer(), event.getWorld().getName(), event.getChunk().getX(),
+            event.getChunk().getZ());
+    }
+
+    private void drawAgain(final Player viewer, final String world, final int chunkX, final int chunkZ) {
+        final Set<ChunkKey> alreadyShown = this.shown.get(viewer.getUniqueId());
+        if (alreadyShown == null || !alreadyShown.remove(new ChunkKey(world, chunkX, chunkZ))) {
+            // Nothing was drawn there, so there is nothing to draw again - and no packets are sent
+            // for the thousands of ordinary chunks a player is handed nowhere near a border
+            return;
+        }
+        this.entities.forget(viewer, world, chunkX, chunkZ);
     }
 
     /**
