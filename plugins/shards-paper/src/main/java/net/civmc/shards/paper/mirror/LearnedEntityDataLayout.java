@@ -6,6 +6,7 @@ import com.github.retrooper.packetevents.event.PacketSendEvent;
 import com.github.retrooper.packetevents.protocol.entity.data.EntityData;
 import com.github.retrooper.packetevents.protocol.entity.data.EntityDataType;
 import com.github.retrooper.packetevents.protocol.entity.data.EntityDataTypes;
+import com.github.retrooper.packetevents.protocol.entity.pose.EntityPose;
 import com.github.retrooper.packetevents.protocol.item.ItemStack;
 import com.github.retrooper.packetevents.protocol.packettype.PacketType;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityMetadata;
@@ -41,6 +42,12 @@ import org.bukkit.entity.Player;
  * entity; two candidates mean the question cannot be answered this way, and it is then answered not at
  * all. That is why {@link EntityDataLayout.Field} is a short list - a byte field cannot be picked out
  * like this, and a byte field is exactly what caused the trouble that led here.</p>
+ *
+ * <p>Watching is now the <em>second</em> place asked. {@link ServerFieldNumbers} reads the number off
+ * the class the server declares it on, which needs no entity of that kind to exist here and no player
+ * to be looking at one - and answers for fields watching never can. Watching stays because it needs
+ * nothing of the server's internals, and it is what answers on a server this was not written
+ * against.</p>
  *
  * <p>Contradicting evidence takes a field away again. Something that was being drawn stops being
  * drawn, which is the right way round: the alternative is carrying on sending a number that has just
@@ -128,6 +135,14 @@ public final class LearnedEntityDataLayout extends PacketListenerAbstract implem
      */
     @SuppressWarnings({"unchecked", "rawtypes"})
     public Optional<EntityData<?>> itemData(final EntityType type, final ItemStack item) {
+        // What the server itself declares, where it declares it. Asked first because it does not
+        // depend on this server having an entity of that kind for somebody to look at: a shard with
+        // no item frames of its own never watched one being described, and drew every frame on every
+        // neighbour empty for as long as it ran
+        final OptionalInt declared = declaredItemIndex(type);
+        if (declared.isPresent()) {
+            return Optional.of(new EntityData(declared.getAsInt(), EntityDataTypes.ITEMSTACK, item));
+        }
         synchronized (this.lock) {
             final Map<Field, Candidate> fields = this.learned.get(type);
             final Candidate candidate = fields == null ? null : fields.get(Field.ITEM);
@@ -141,6 +156,50 @@ public final class LearnedEntityDataLayout extends PacketListenerAbstract implem
                 : item;
             return Optional.of(new EntityData(index, dataType, value));
         }
+    }
+
+    /**
+     * The field an item sits in, as the server's own class declares it, for the kinds this draws.
+     */
+    private OptionalInt declaredItemIndex(final EntityType type) {
+        if (type == EntityType.ITEM_FRAME || type == EntityType.GLOW_ITEM_FRAME) {
+            return ServerFieldNumbers.itemFrameItem(this.logger);
+        }
+        return OptionalInt.empty();
+    }
+
+    /**
+     * Which skin layers a player has switched on, ready to send, or empty when the server would not
+     * say where it keeps that.
+     *
+     * <p>Only the server's own classes can answer this one. It is a byte, and a byte cannot be picked
+     * out of a metadata packet by its type - there are several - which is exactly why a mirrored
+     * player had a plain skin for as long as watching packets was the only way to ask.</p>
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public Optional<EntityData<?>> skinLayers(final byte parts) {
+        final OptionalInt index = ServerFieldNumbers.playerSkinLayers(this.logger);
+        if (index.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(new EntityData(index.getAsInt(), EntityDataTypes.BYTE, parts));
+    }
+
+    /**
+     * What an entity is doing with itself - standing, sneaking, swimming, gliding - ready to send.
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public Optional<EntityData<?>> pose(final EntityPose pose) {
+        final OptionalInt declared = ServerFieldNumbers.pose(this.logger);
+        if (declared.isPresent()) {
+            return Optional.of(new EntityData(declared.getAsInt(), EntityDataTypes.ENTITY_POSE, pose));
+        }
+        // A pose can be told apart by its type, so this one the watcher can answer as well
+        final OptionalInt watched = indexOf(EntityType.PLAYER, Field.POSE);
+        if (watched.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(new EntityData(watched.getAsInt(), EntityDataTypes.ENTITY_POSE, pose));
     }
 
     /**
