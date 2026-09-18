@@ -2,7 +2,6 @@ package net.civmc.shards.paper.border;
 
 import java.util.Base64;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
@@ -36,6 +35,10 @@ import org.bukkit.plugin.java.JavaPlugin;
  */
 public final class TransferService {
 
+    // A handover is a few hundred milliseconds. Well past that and something has gone wrong with it
+    private static final long STUCK_AFTER_NANOS = 5L * 1_000_000_000L;
+    private static final long STILL_HERE_AFTER_TICKS = 20L * 10L;
+
     private final JavaPlugin plugin;
     private final ShardsClient client;
     private final OwnedPlayers owned;
@@ -44,7 +47,10 @@ public final class TransferService {
     private final Component failureMessage;
     private final BorderNotices notices;
     private final BorderView view;
-    private final Set<UUID> inTransit = ConcurrentHashMap.newKeySet();
+    // When each handover started, not merely that one did. A crossing that silently does nothing is
+    // the hardest thing here to report on, and the difference between "they are half a second into a
+    // handover" and "they have been stuck in one for a minute" is the whole of the answer
+    private final Map<UUID, Long> inTransit = new ConcurrentHashMap<>();
     // What was taken out from under each player, so it can be put back if the handover never starts
     private final Map<UUID, VehicleSnapshot> removedVehicles = new ConcurrentHashMap<>();
 
@@ -62,7 +68,7 @@ public final class TransferService {
     }
 
     public boolean isInTransit(final UUID playerUuid) {
-        return this.inTransit.contains(playerUuid);
+        return this.inTransit.containsKey(playerUuid);
     }
 
     /**
@@ -121,13 +127,22 @@ public final class TransferService {
     private boolean start(final Player player, final PlayerLocation target, final Location localTarget,
                           final String shardName) {
         final UUID playerUuid = player.getUniqueId();
-        if (!this.inTransit.add(playerUuid)) {
+        final Long alreadyStartedAt = this.inTransit.putIfAbsent(playerUuid, System.nanoTime());
+        if (alreadyStartedAt != null) {
+            // Not a fault in itself: a handover takes a few hundred milliseconds and they go on
+            // walking into the edge while it runs. It is a fault when it has been a long time, and
+            // this is the only place that would ever know
+            sinceCrossingStarted(playerUuid, alreadyStartedAt);
             return false;
         }
 
         final PlayerAttemptLeaveShardEvent event = new PlayerAttemptLeaveShardEvent(player, localTarget);
         Bukkit.getPluginManager().callEvent(event);
         if (event.isCancelled()) {
+            // Said out loud, because from in the game it is a player walking into an edge and nothing
+            // happening at all - no message, no shove, no line in the log
+            this.logger.info("Something cancelled " + playerUuid + " leaving this shard, so they stay "
+                + "where they are");
             this.inTransit.remove(playerUuid);
             return false;
         }
@@ -199,6 +214,12 @@ public final class TransferService {
         if (response.status() == TransferStatus.TRANSFERRED) {
             // It travelled in the payload and the destination rebuilds it there
             this.removedVehicles.remove(playerUuid);
+            // Their connection is moved by the proxy after this answer, and if that never happens they
+            // are held here in a handover that has already succeeded: this server has given up their
+            // data, so it will not start another one, and every step into the border after that does
+            // nothing whatsoever. Nothing else would ever say so
+            Bukkit.getScheduler().runTaskLater(this.plugin, () -> stillHere(playerUuid),
+                STILL_HERE_AFTER_TICKS);
             // Still in transit until they actually go. The answer arrives before the connection is
             // handed over, so they keep moving here for a moment - and clearing it now would let those
             // moves start a second handover for a player this server has already given up
@@ -236,6 +257,31 @@ public final class TransferService {
      * than rebuilt riderless in a world they are not in - it is recoverable from the log, which a
      * silently dropped horse is not.</p>
      */
+    /**
+     * Says how long a crossing already under way has been running, when another is asked for.
+     */
+    private void sinceCrossingStarted(final UUID playerUuid, final long startedAt) {
+        final long waitingNanos = System.nanoTime() - startedAt;
+        if (waitingNanos < STUCK_AFTER_NANOS) {
+            return;
+        }
+        this.logger.warning(playerUuid + " has been in a handover for "
+            + (waitingNanos / 1_000_000L) + "ms and is still walking into the border. Nothing further "
+            + "will be tried for them here: this server has already given up their data");
+    }
+
+    /**
+     * Complains about a player the proxy said it had moved and who is still on this server.
+     */
+    private void stillHere(final UUID playerUuid) {
+        if (Bukkit.getPlayer(playerUuid) == null || !this.inTransit.containsKey(playerUuid)) {
+            return;
+        }
+        this.logger.severe("The proxy said " + playerUuid + " had been transferred, and they are still "
+            + "connected here. They cannot cross again until they reconnect, because their data is no "
+            + "longer owned by this server");
+    }
+
     private void putVehicleBack(final UUID playerUuid, final Player player) {
         final VehicleSnapshot vehicle = this.removedVehicles.remove(playerUuid);
         if (vehicle == null) {
