@@ -22,6 +22,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.util.Vector;
 
 /**
  * Hands a player to whichever shard owns the place they are going.
@@ -93,7 +94,16 @@ public final class TransferService {
      * @return whether the transfer was started. False means the player stays exactly where they are
      */
     public boolean transferTo(final Player player, final Location target) {
-        return start(player, toPlayerLocation(target), target, null);
+        return start(player, toPlayerLocation(target), target, null, null);
+    }
+
+    /**
+     * The same, carrying the motion the caller watched them make into the snapshot.
+     *
+     * @param observedMotion blocks moved in the tick that caused this crossing
+     */
+    public boolean transferTo(final Player player, final Location target, final Vector observedMotion) {
+        return start(player, toPlayerLocation(target), target, null, observedMotion);
     }
 
     /**
@@ -105,7 +115,7 @@ public final class TransferService {
      * <p>Must run on the main thread: the snapshot is read from a live player.</p>
      */
     public boolean transferTo(final Player player, final PlayerLocation target) {
-        return start(player, target, null, null);
+        return start(player, target, null, null, null);
     }
 
     /**
@@ -121,11 +131,11 @@ public final class TransferService {
      * <p>Must run on the main thread: the snapshot is read from a live player.</p>
      */
     public boolean transferToShard(final Player player, final String shardName) {
-        return start(player, null, null, shardName);
+        return start(player, null, null, shardName, null);
     }
 
     private boolean start(final Player player, final PlayerLocation target, final Location localTarget,
-                          final String shardName) {
+                          final String shardName, final Vector observedMotion) {
         final UUID playerUuid = player.getUniqueId();
         final Long alreadyStartedAt = this.inTransit.putIfAbsent(playerUuid, System.nanoTime());
         if (alreadyStartedAt != null) {
@@ -160,7 +170,7 @@ public final class TransferService {
         final long capturedAt;
         final long startedAt = System.nanoTime();
         try {
-            final PlayerSnapshot snapshot = PlayerSnapshots.captureForTransfer(player);
+            final PlayerSnapshot snapshot = PlayerSnapshots.captureForTransfer(player, observedMotion);
             capturedAt = System.nanoTime();
             vehicle = snapshot.vehicle();
             final String payload = Base64.getEncoder().encodeToString(PlayerSnapshotCodec.toBytes(snapshot));

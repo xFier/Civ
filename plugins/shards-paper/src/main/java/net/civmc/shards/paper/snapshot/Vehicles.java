@@ -17,6 +17,7 @@ import org.bukkit.entity.Steerable;
 import org.bukkit.entity.Tameable;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.util.Vector;
 
 /**
  * Carrying the thing a player is riding across a border with them.
@@ -56,7 +57,12 @@ public final class Vehicles {
             vehicle instanceof ChestedHorse chested ? chested.isCarryingChest() : null,
             vehicle instanceof Steerable steerable ? steerable.hasSaddle() : null,
             vehicle instanceof Ageable ageable ? ageable.isAdult() : null,
-            vehicle instanceof Ageable ageable ? ageable.getAge() : null);
+            vehicle instanceof Ageable ageable ? ageable.getAge() : null,
+            // A vehicle is simulated by this server, unlike a player, so what it says about its own
+            // motion is the truth rather than the last thing anybody told it
+            vehicle.getVelocity().getX(),
+            vehicle.getVelocity().getY(),
+            vehicle.getVelocity().getZ());
     }
 
     /**
@@ -97,6 +103,29 @@ public final class Vehicles {
         final Entity vehicle = player.getWorld().spawnEntity(at, type);
         apply(vehicle, snapshot);
         vehicle.addPassenger(player);
+    }
+
+    /**
+     * Puts the rebuilt vehicle back into the motion it was in.
+     *
+     * <p>A tick after {@link #restore}, and for the same reason the player's own motion waits: the
+     * join tick sends a position, and any motion set during it is discarded. Set on the join tick, a
+     * minecart doing full speed into a border arrived stopped dead - which was the whole of what
+     * crossing on rails felt like.</p>
+     *
+     * <p>Applied to the vehicle and not to the rider. A passenger's own velocity is not what moves
+     * them; the thing carrying them is.</p>
+     */
+    public static void restoreMotion(final Player player, final VehicleSnapshot snapshot) {
+        if (snapshot == null || snapshot.velocityX() == null) {
+            // Written before motion was carried. Standing still is what it has always meant
+            return;
+        }
+        final Entity vehicle = player.getVehicle();
+        if (vehicle == null) {
+            return;
+        }
+        vehicle.setVelocity(new Vector(snapshot.velocityX(), snapshot.velocityY(), snapshot.velocityZ()));
     }
 
     private static void apply(final Entity vehicle, final VehicleSnapshot snapshot) {

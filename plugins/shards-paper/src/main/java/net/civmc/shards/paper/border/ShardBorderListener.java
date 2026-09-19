@@ -99,11 +99,21 @@ public final class ShardBorderListener implements Listener {
         // who is standing still, and a sprint jump over a border would stop dead on the far side.
         // Cancelled either way: they are held at the edge until the transfer answers, so they cannot
         // keep walking into ground this server is not authoritative for
+        // Their real momentum, which is not what the server holds as their velocity: a player is
+        // simulated by their own client, so this server's idea of how fast they are going is whatever
+        // last pushed them, and for somebody simply running that is nothing. One tick of movement is
+        // the same unit velocity is measured in, so the difference between the two ends of this move
+        // is the thing to carry
+        final Vector momentum = event.getTo().toVector().subtract(event.getFrom().toVector());
         if (shouldSaySo(event.getPlayer())) {
-            this.logger.info(event.getPlayer().getName() + " is crossing at " + leaving.getBlockX() + ","
-                + leaving.getBlockZ());
+            this.logger.info(String.format(
+                "%s is crossing at %d,%d carrying %.4f,%.4f,%.4f (this server held them at %.4f,%.4f,%.4f)",
+                event.getPlayer().getName(), leaving.getBlockX(), leaving.getBlockZ(),
+                momentum.getX(), momentum.getY(), momentum.getZ(),
+                event.getPlayer().getVelocity().getX(), event.getPlayer().getVelocity().getY(),
+                event.getPlayer().getVelocity().getZ()));
         }
-        this.transfers.transferTo(event.getPlayer(), leaving);
+        this.transfers.transferTo(event.getPlayer(), leaving, momentum);
         event.setCancelled(true);
     }
 
@@ -227,7 +237,8 @@ public final class ShardBorderListener implements Listener {
                 // side. Anything else riding along does not - it is an entity of this shard with
                 // nobody to carry it
                 carryingSomebody = true;
-                this.transfers.transferTo(player, event.getTo());
+                this.transfers.transferTo(player, event.getTo(),
+                    event.getTo().toVector().subtract(event.getFrom().toVector()));
             }
         }
         if (carryingSomebody || this.border.isOutside(event.getFrom())) {
@@ -271,9 +282,10 @@ public final class ShardBorderListener implements Listener {
         if (!this.border.isOutside(next)) {
             return;
         }
+        final Vector momentum = to.toVector().subtract(from.toVector());
         for (final Entity passenger : event.getVehicle().getPassengers()) {
             if (passenger instanceof Player player) {
-                this.transfers.transferTo(player, next);
+                this.transfers.transferTo(player, next, momentum);
             }
         }
     }
