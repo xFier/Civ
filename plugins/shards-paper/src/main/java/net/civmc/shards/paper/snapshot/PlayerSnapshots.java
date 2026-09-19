@@ -60,7 +60,7 @@ public final class PlayerSnapshots {
      * other entity, so carrying it here too would rebuild it at the next login and leave two.</p>
      */
     public static PlayerSnapshot capture(final Player player) {
-        return capture(player, null);
+        return capture(player, null, null);
     }
 
     /**
@@ -68,10 +68,29 @@ public final class PlayerSnapshots {
      * vehicle cannot stay behind because the player is not coming back for it.
      */
     public static PlayerSnapshot captureForTransfer(final Player player) {
-        return capture(player, Vehicles.capture(player));
+        return captureForTransfer(player, null);
     }
 
-    private static PlayerSnapshot capture(final Player player, final VehicleSnapshot vehicle) {
+    /**
+     * The same, with the motion the caller watched the player make.
+     *
+     * <p>Preferred over {@link Player#getVelocity()} whenever there is one, because a player is not
+     * simulated by this server - their client is, and it sends positions. What the server holds as
+     * their velocity is the last thing something set on them, which for somebody running across the
+     * ground is very often nothing at all. The move that triggered the crossing carries the truth:
+     * where they were, where they were going, and the difference between the two is a tick of motion,
+     * which is exactly the unit velocity is in.</p>
+     *
+     * @param observedMotion blocks moved in the tick that caused this crossing, or null when there is
+     *     no such tick - a respawn, or a transfer somebody asked for
+     */
+    public static PlayerSnapshot captureForTransfer(final Player player, final Vector observedMotion) {
+        return capture(player, Vehicles.capture(player), observedMotion);
+    }
+
+    private static PlayerSnapshot capture(final Player player, final VehicleSnapshot vehicle,
+                                          final Vector observedMotion) {
+        final Vector motion = observedMotion == null ? player.getVelocity() : observedMotion;
         return new PlayerSnapshot(
             PlayerSnapshot.CURRENT_VERSION,
             encode(ItemStack.serializeItemsAsBytes(player.getInventory().getContents())),
@@ -103,9 +122,9 @@ public final class PlayerSnapshots {
             vehicle,
             player.getLocation().getYaw(),
             player.getLocation().getPitch(),
-            player.getVelocity().getX(),
-            player.getVelocity().getY(),
-            player.getVelocity().getZ(),
+            motion.getX(),
+            motion.getY(),
+            motion.getZ(),
             player.getFallDistance(),
             player.isSprinting(),
             player.isGliding(),
@@ -180,6 +199,9 @@ public final class PlayerSnapshots {
         if (snapshot.swimming()) {
             player.setSwimming(true);
         }
+        // Last, and it may undo the velocity set above: a passenger is moved by what carries them,
+        // not by their own motion
+        Vehicles.restoreMotion(player, snapshot.vehicle());
     }
 
     private static String capturePersistentData(final Player player) {

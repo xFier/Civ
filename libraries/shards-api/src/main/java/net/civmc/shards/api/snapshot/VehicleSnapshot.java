@@ -23,6 +23,9 @@ import java.util.Objects;
  * @param inventory base64 of the vehicle's own contents, null if it holds nothing - a chest minecart's
  *     cargo, or a horse's saddle and armour
  * @param ownerUuid the taming owner, null if untamed or not tameable
+ * @param velocityX how the vehicle was already moving, so a minecart at speed arrives at speed. Null
+ *     on a payload written before this was carried, which reads as a vehicle that was standing still -
+ *     the same thing every rebuilt vehicle used to be
  */
 public record VehicleSnapshot(
     String type,
@@ -39,7 +42,10 @@ public record VehicleSnapshot(
     Boolean carryingChest,
     Boolean saddled,
     Boolean adult,
-    Integer age
+    Integer age,
+    Double velocityX,
+    Double velocityY,
+    Double velocityZ
 ) {
 
     public VehicleSnapshot {
