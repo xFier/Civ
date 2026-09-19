@@ -527,6 +527,31 @@ public final class MirrorView implements Listener {
      * never visited is dropped within the hour and is not written again.</p>
      */
     /**
+     * What the shard that owns this block really has there, as far as this server has been told.
+     *
+     * <p>The mirror holds the <em>difference</em> from our own copy, so the neighbour's block is that
+     * difference where there is one and our own block where there is not - the same answer the client
+     * is being shown, arrived at the same way.</p>
+     *
+     * <p>Reading it to decide something is not the same as making it real. Nothing here enters the
+     * world: no block is placed and the answer is a decision rather than an object. What it is for is
+     * declining to send somebody into ground the neighbour has built on, which is this server
+     * refusing to act rather than acting on ground it does not own.</p>
+     *
+     * @return the neighbour's block, or null where this server has not read that chunk yet - which
+     *     means "not known" and never "nothing there"
+     */
+    public BlockData neighbourBlockAt(final World world, final int x, final int y, final int z) {
+        final Mirrored current = this.mirrored.get(new ChunkKey(world.getName(), x >> 4, z >> 4));
+        if (current == null) {
+            return null;
+        }
+        final BlockData differs = current.blocks().get(Position.block(x, y, z));
+        // Where the two copies agree there is no entry, and our own block is the neighbour's block
+        return differs != null ? differs : world.getBlockAt(x, y, z).getBlockData();
+    }
+
+    /**
      * Drops what was worked out about one chunk, because the ground it was worked out against has
      * moved.
      *
