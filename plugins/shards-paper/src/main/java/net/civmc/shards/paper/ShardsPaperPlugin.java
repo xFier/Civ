@@ -117,6 +117,9 @@ public final class ShardsPaperPlugin extends JavaPlugin {
         }
         getServer().getPluginManager().registerEvents(
             new ShardBorderListener(this.border, this.transfers, notices, outlook,
+                // Read through the field rather than captured: the mirror is built after this, and
+                // may never be built at all, in which case the far side is simply not known
+                (world, x, y, z) -> this.mirror == null ? null : this.mirror.neighbourBlockAt(world, x, y, z),
                 getLogger()), this);
         getServer().getPluginManager().registerEvents(
             new ShardRespawnListener(this, this.border, this.transfers, getLogger()), this);
