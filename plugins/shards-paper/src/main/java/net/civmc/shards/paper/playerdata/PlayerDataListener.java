@@ -19,6 +19,7 @@ import net.civmc.shards.api.PlayerLocation;
 import net.civmc.shards.api.snapshot.PlayerSnapshot;
 import net.civmc.shards.api.snapshot.PlayerSnapshotCodec;
 import net.civmc.shards.paper.border.ArrivalCue;
+import net.civmc.shards.paper.border.SafeLanding;
 import net.civmc.shards.paper.border.TransferService;
 import net.civmc.shards.paper.rabbitmq.ShardsClient;
 import net.civmc.shards.paper.snapshot.PlayerSnapshots;
@@ -33,6 +34,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -188,6 +190,26 @@ public final class PlayerDataListener implements Listener {
         event.setSpawnLocation(new Location(world, stored.x(), stored.y(), stored.z(), yaw, pitch));
     }
 
+    /**
+     * Lifts an arrival out of ground the shard they came from did not know was there.
+     *
+     * <p>Said out loud when it happens, because it is the shard that aimed them being wrong about the
+     * far side rather than anything going wrong here - and how often it happens is a measure of how
+     * far the two copies of the border have drifted apart.</p>
+     */
+    private void clearOfTheGround(final Player player) {
+        final Location clear = SafeLanding.clearOf(player);
+        if (clear == null) {
+            return;
+        }
+        this.logger.info(String.format(
+            "%s arrived inside a block at %d,%d,%d and was moved to y=%d. The shard they came from "
+                + "aimed them with its own copy of this ground, which is out of date",
+            player.getUniqueId(), player.getLocation().getBlockX(), player.getLocation().getBlockY(),
+            player.getLocation().getBlockZ(), clear.getBlockY()));
+        player.teleport(clear, PlayerTeleportEvent.TeleportCause.PLUGIN);
+    }
+
     @EventHandler(priority = EventPriority.LOWEST)
     public void onJoin(final PlayerJoinEvent event) {
         final Player player = event.getPlayer();
@@ -201,6 +223,13 @@ public final class PlayerDataListener implements Listener {
         }
         final long restoreStartedAt = System.nanoTime();
         try {
+            // Before the restore, not after: the restore rebuilds whatever they were riding at wherever
+            // they are standing, and a minecart built inside a hillside is no better than a player in
+            // one. Only for a crossing - a login puts somebody back where they logged out, which is
+            // somewhere they were already standing
+            if (crossedIn) {
+                clearOfTheGround(player);
+            }
             PlayerSnapshots.restore(player, snapshot);
             this.logger.info(String.format("Restored %s in %dms", playerUuid,
                 elapsedMillis(restoreStartedAt)));
