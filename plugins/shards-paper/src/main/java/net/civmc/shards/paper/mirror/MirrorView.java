@@ -526,6 +526,24 @@ public final class MirrorView implements Listener {
      * happens under a second. It also makes the saved file self-limiting: what is restored and then
      * never visited is dropped within the hour and is not written again.</p>
      */
+    /**
+     * Drops what was worked out about one chunk, because the ground it was worked out against has
+     * moved.
+     *
+     * <p>The mirror holds a <em>difference</em> from this server's own copy, so it is only meaningful
+     * while that copy stands still. When the band sync writes a neighbour's blocks into our world,
+     * every difference held for that chunk is a difference from something that is no longer there -
+     * and drawing it would paint the old ground back over the new.
+     */
+    public void forgetChunk(final ChunkKey key) {
+        this.mirrored.remove(key);
+        this.lastNearby.remove(key);
+        for (final Set<ChunkKey> shownToSomebody : this.shown.values()) {
+            // Or the next pass counts it as already sent and never draws it again
+            shownToSomebody.remove(key);
+        }
+    }
+
     public void forgetWhatNobodyIsLookingAt() {
         final long now = System.nanoTime();
         int dropped = 0;

@@ -27,11 +27,14 @@ import org.bukkit.configuration.file.FileConfiguration;
  *     restart reads every border chunk again from nothing, and a neighbour that is down shows as this
  *     server's own untouched copy rather than the last thing it said
  * @param borderStyle what the border is drawn with
+ * @param borderBandChunks how deep a strip of each neighbour's ground this server brings its own copy
+ *     of up to date at startup, in chunks. Zero switches it off and leaves that ground as it was on
+ *     the day this shard was copied from the others
  */
 public record ShardsPaperConfig(String serverName, String failureMessage, int saveIntervalSeconds,
                                 String arrivalTitle, String arrivalSubtitle, int skySyncSeconds,
                                 boolean hideUnownedEntities, boolean mirrorChunks, boolean saveMirror,
-                                BorderStyle borderStyle,
+                                BorderStyle borderStyle, int borderBandChunks,
                                 String user, String password, String host, int port) {
 
     /**
@@ -88,6 +91,7 @@ public record ShardsPaperConfig(String serverName, String failureMessage, int sa
             configuration.getBoolean("mirror-chunks", true),
             configuration.getBoolean("save-mirror", true),
             borderStyle(configuration.getString("border-style", "particles")),
+            configuration.getInt("border-band-chunks", 2),
             rabbitmq.getString("user", "guest"),
             rabbitmq.getString("password", "guest"),
             rabbitmq.getString("host", "localhost"),

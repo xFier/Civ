@@ -19,6 +19,7 @@ import net.civmc.shards.paper.border.ShardBorderListener;
 import net.civmc.shards.paper.border.ShardRespawnListener;
 import net.civmc.shards.paper.border.TransferService;
 import net.civmc.shards.paper.config.ShardsPaperConfig;
+import net.civmc.shards.paper.mirror.BorderBandSync;
 import net.civmc.shards.paper.mirror.ChunkRevisions;
 import net.civmc.shards.paper.mirror.EntityDataLayout;
 import net.civmc.shards.paper.mirror.LearnedEntityDataLayout;
@@ -115,7 +116,8 @@ public final class ShardsPaperPlugin extends JavaPlugin {
             getLogger().info("No arrival title configured, so a crossing into this shard is unannounced");
         }
         getServer().getPluginManager().registerEvents(
-            new ShardBorderListener(this.border, this.transfers, notices, outlook, getLogger()), this);
+            new ShardBorderListener(this.border, this.transfers, notices, outlook,
+                getLogger()), this);
         getServer().getPluginManager().registerEvents(
             new ShardRespawnListener(this, this.border, this.transfers, getLogger()), this);
         getCommand("shardsnapshot").setExecutor(new SnapshotVerifyCommand());
@@ -271,6 +273,11 @@ public final class ShardsPaperPlugin extends JavaPlugin {
             positions -> getServer().getScheduler().runTask(this, () -> players.apply(positions)));
         this.mirrorServer.start();
         getServer().getPluginManager().registerEvents(mirror, this);
+
+        // Before anything is drawn and while nobody is on: what this writes is the ground itself, and
+        // the mirror's picture of a chunk is a difference from that ground
+        new BorderBandSync(this, this.border, this.client, mirror, this.config.serverName(),
+            getLogger(), this.config.borderBandChunks()).start();
         // A refused placement makes the client correct itself to what is really there, which for
         // another shard's ground is this server's own copy - so the mirror has to be drawn again
         getServer().getPluginManager().registerEvents(new MirrorRepairListener(this, mirror), this);

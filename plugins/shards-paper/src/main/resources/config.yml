@@ -86,6 +86,30 @@ mirror-chunks: true
 # it, which holds because every block change past the border is already refused.
 save-mirror: true
 
+# How deep a strip of each neighbour's ground this server brings its own copy of up to date at
+# startup, in chunks. Zero switches it off.
+#
+# Every shard starts as a copy of the same world and from then on only ever changes its own ground,
+# so this server's copy of its neighbours' land is that land as it was on the day of the split. The
+# mirror draws over that for the client and writes none of it, which is right for a picture and
+# leaves the server itself still simulating against the old blocks: a player walks into walls only
+# this server believes in, and a minecart carries its rider into them and suffocates them, with a
+# clear view of open ground the whole way.
+#
+# This is not the mirror becoming real. The neighbour's blocks have been in this world since the day
+# it was copied - what is out of date is which day - so this refreshes the seed rather than making a
+# picture solid. Terrain only: a chunk read carries block states, so no chest's contents and no
+# sign's words are written, and those stay drawn and unreal.
+#
+# A thin strip on purpose. What matters is where a player can reach, which is the first block or two
+# past a seam; the rest of what they can see is the mirror's job. Two chunks around a shard is a few
+# hundred columns, where the visible radius would be thousands.
+#
+# Opportunistic: a neighbour that is still starting up is skipped rather than waited for, and asked
+# again every minute until it answers. Ground owned by nobody is left alone - this server's copy of
+# it is already the best there is.
+border-band-chunks: 2
+
 # What the border between shards is drawn with, where a player can see one.
 #
 #   particles  coloured dust, repainted twice a second. Nothing exists in the world between passes,

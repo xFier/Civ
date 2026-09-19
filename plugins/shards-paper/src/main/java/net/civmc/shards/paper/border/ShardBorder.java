@@ -32,6 +32,15 @@ public final class ShardBorder {
     }
 
     /**
+     * The areas themselves, for the one caller that has to walk the ground around them rather than
+     * ask about a place: bringing the band just past this shard's edges up to date needs somewhere to
+     * start looking, and the box around these is it.
+     */
+    public List<ShardRegion> regions() {
+        return this.regions.get();
+    }
+
+    /**
      * Whether a position is outside every area this server owns.
      *
      * <p>A server with no areas owns everywhere as far as this is concerned. It is not a shard - the
