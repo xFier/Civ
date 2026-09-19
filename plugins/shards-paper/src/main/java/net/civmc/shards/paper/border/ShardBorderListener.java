@@ -2,6 +2,11 @@ package net.civmc.shards.paper.border;
 
 import io.papermc.paper.event.entity.EntityMoveEvent;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.logging.Logger;
 import net.civmc.shards.api.TransferStatus;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
@@ -40,6 +45,7 @@ import org.bukkit.event.player.PlayerBucketEmptyEvent;
 import org.bukkit.event.player.PlayerBucketFillEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.event.vehicle.VehicleMoveEvent;
 import org.bukkit.event.world.StructureGrowEvent;
@@ -56,32 +62,35 @@ import org.bukkit.util.Vector;
  */
 public final class ShardBorderListener implements Listener {
 
+    // Somebody walking a border generates this every tick, and the answer does not change between
+    // two of them. Once a second is enough to read afterwards and little enough to leave switched on
+    private static final long SAY_SO_EVERY_NANOS = TimeUnit.SECONDS.toNanos(1L);
+
     private final ShardBorder border;
     private final TransferService transfers;
     private final BorderNotices notices;
     private final BorderOutlook outlook;
+    private final Logger logger;
+    private final Map<UUID, Long> saidSoAt = new ConcurrentHashMap<>();
 
     public ShardBorderListener(final ShardBorder border, final TransferService transfers,
-                               final BorderNotices notices, final BorderOutlook outlook) {
+                               final BorderNotices notices, final BorderOutlook outlook,
+                               final Logger logger) {
         this.border = border;
         this.transfers = transfers;
         this.notices = notices;
         this.outlook = outlook;
+        this.logger = logger;
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onMove(final PlayerMoveEvent event) {
-        final Location to = event.getTo();
-        final Location from = event.getFrom();
-        // Only when the block changes: this runs for every fraction of a block a player moves, and
-        // ownership cannot change without leaving the block you were standing on
-        if (to.getBlockX() == from.getBlockX() && to.getBlockZ() == from.getBlockZ()) {
+        final Location leaving = leaving(event.getFrom(), event.getTo());
+        if (leaving == null) {
+            sayWhyNobodyIsLeaving(event.getPlayer(), event.getFrom(), event.getTo());
             return;
         }
-        if (!this.border.isOutside(to)) {
-            return;
-        }
-        if (refuseWithoutAsking(event.getPlayer(), to)) {
+        if (refuseWithoutAsking(event.getPlayer(), leaving)) {
             event.setCancelled(true);
             return;
         }
@@ -90,8 +99,88 @@ public final class ShardBorderListener implements Listener {
         // who is standing still, and a sprint jump over a border would stop dead on the far side.
         // Cancelled either way: they are held at the edge until the transfer answers, so they cannot
         // keep walking into ground this server is not authoritative for
-        this.transfers.transferTo(event.getPlayer(), to);
+        if (shouldSaySo(event.getPlayer())) {
+            this.logger.info(event.getPlayer().getName() + " is crossing at " + leaving.getBlockX() + ","
+                + leaving.getBlockZ());
+        }
+        this.transfers.transferTo(event.getPlayer(), leaving);
         event.setCancelled(true);
+    }
+
+    /**
+     * Where this move is taking somebody off this shard, or null for one that keeps them on it.
+     *
+     * <p>Two ways, and the second is the one that does the work. A move that lands outright on ground
+     * this server does not own is caught for what it is - that is anything with reach, a pearl landing
+     * or a shove - and for everybody else the crossing begins when their body touches the seam, which
+     * is a third of a block before their feet would have. {@link SeamCrossing} is where the reason for
+     * that is written down: past the seam this server's copy of the ground is the world as generated,
+     * without anything the neighbour has built or dug there since, so requiring a player to stand on
+     * it made leaving depend on two shards happening to have the same terrain.</p>
+     */
+    private Location leaving(final Location from, final Location to) {
+        if (this.border.isOutside(to)) {
+            return to;
+        }
+        return SeamCrossing.reached(this.border, from, to);
+    }
+
+    /**
+     * Says so when somebody is walking into a border and not being handed over.
+     *
+     * <p>The one thing a player at a border could never get an answer about. Every refusal has said
+     * why for a while now, but a crossing that is simply never <em>attempted</em> had nothing to say
+     * anything - and that is what walking into an edge and being bounced off it actually is. Twice now
+     * a run has ended with a border that does not work and a log with not one line about it in.</p>
+     *
+     * <p>Rare now rather than routine: {@link SeamCrossing} takes anybody moving towards a neighbour's
+     * block from the last block inside, so reaching here at all means the way they are going and the
+     * way they are facing the border disagree. Kept for the next time a border does not work, because
+     * the whole cost of finding this one was that nothing said where the player was and which block
+     * they were walking at.</p>
+     */
+    private void sayWhyNobodyIsLeaving(final Player player, final Location from, final Location to) {
+        final double movedX = to.getX() - from.getX();
+        final double movedZ = to.getZ() - from.getZ();
+        if (movedX == 0.0D && movedZ == 0.0D) {
+            return;
+        }
+        final int blockX = to.getBlockX();
+        final int blockZ = to.getBlockZ();
+        final int towardsX = blockX + (int) Math.signum(movedX);
+        final int towardsZ = blockZ + (int) Math.signum(movedZ);
+        // One block, not one of each axis. Printing the pair named a diagonal nobody is walking into
+        final int aheadX = movedX != 0.0D && this.border.isOutside(towardsX, blockZ) ? towardsX : blockX;
+        final int aheadZ = movedZ != 0.0D && this.border.isOutside(blockX, towardsZ) ? towardsZ : blockZ;
+        if (aheadX == blockX && aheadZ == blockZ) {
+            return;
+        }
+        if (!shouldSaySo(player)) {
+            return;
+        }
+        this.logger.info(String.format(
+            "%s is at x=%.4f y=%.2f z=%.4f walking towards the border and is not being handed over. "
+                + "The block ahead is %d,%d, and they moved %.4f,%.4f this tick",
+            player.getName(), to.getX(), to.getY(), to.getZ(), aheadX, aheadZ, movedX, movedZ));
+    }
+
+    /**
+     * Whether this player's border has been reported on recently. Walking into one is a line a tick
+     * otherwise, and the answer does not change between two of them.
+     */
+    private boolean shouldSaySo(final Player player) {
+        final long now = System.nanoTime();
+        final Long lastSaid = this.saidSoAt.get(player.getUniqueId());
+        if (lastSaid != null && now - lastSaid < SAY_SO_EVERY_NANOS) {
+            return false;
+        }
+        this.saidSoAt.put(player.getUniqueId(), now);
+        return true;
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onQuit(final PlayerQuitEvent event) {
+        this.saidSoAt.remove(event.getPlayer().getUniqueId());
     }
 
     /**
@@ -113,6 +202,13 @@ public final class ShardBorderListener implements Listener {
             .orElse(false);
         if (!nowhereToGo) {
             return false;
+        }
+        // The last cancel here that said nothing at all. It is the ordinary answer at the edge of the
+        // map, so it is not a fault - but it is indistinguishable in the game from the border being
+        // broken, and it cost two runs to find that out
+        if (shouldSaySo(player)) {
+            this.logger.info(player.getName() + " was turned back at " + to.getBlockX() + ","
+                + to.getBlockZ() + " without asking the proxy: nothing owns the ground there");
         }
         this.notices.refused(player, TransferStatus.NO_DESTINATION);
         return true;

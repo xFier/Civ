@@ -115,7 +115,7 @@ public final class ShardsPaperPlugin extends JavaPlugin {
             getLogger().info("No arrival title configured, so a crossing into this shard is unannounced");
         }
         getServer().getPluginManager().registerEvents(
-            new ShardBorderListener(this.border, this.transfers, notices, outlook), this);
+            new ShardBorderListener(this.border, this.transfers, notices, outlook, getLogger()), this);
         getServer().getPluginManager().registerEvents(
             new ShardRespawnListener(this, this.border, this.transfers, getLogger()), this);
         getCommand("shardsnapshot").setExecutor(new SnapshotVerifyCommand());
